@@ -1,6 +1,6 @@
 /data/
 /config/config.yaml
 *.torrent
-ratioreign
+/ratioreign
 *.log
 .DS_Store
