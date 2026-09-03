@@ -1,0 +1,4 @@
+.git
+data/
+config/config.yaml
+*.log

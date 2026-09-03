@@ -1,0 +1,43 @@
+# Copy this to config.yaml and edit. See README.md for full field docs.
+
+listenAddr: ":7070"
+
+# Aggregate fake upload speed, in kB/s, distributed across active torrents
+# by (simulated) leecher demand.
+minUploadRateKBs: 30
+maxUploadRateKBs: 160
+
+# Max torrents announcing as "seeding" at once. Extra torrents wait in a
+# pending queue and take a slot as one frees up.
+simultaneousSeed: 20
+
+# Name of a *.client file in profilesDir (without extension) to impersonate.
+clientProfile: qbittorrent-4.6.3
+
+# If false, a torrent is archived once its tracker reports zero leechers
+# (nothing left to farm ratio from).
+keepTorrentWithZeroLeechers: true
+
+# Archive a torrent once uploaded/size reaches this ratio. -1 disables it.
+uploadRatioTarget: -1
+
+torrentsDir: ./data/torrents
+archiveDir: ./data/torrents/archived
+profilesDir: ./profiles
+
+# Optional: poll RSS feeds (e.g. a private tracker's "new torrents" feed)
+# and auto-import any .torrent/enclosure link into torrentsDir.
+rss:
+  - name: example-tracker
+    url: https://example-tracker.example/rss?key=CHANGE_ME
+    pollInterval: 10m
+
+# Optional: mirror qBittorrent's torrent list. Any torrent added there gets
+# its .torrent file pulled and seeded (faked) by ratioreign too.
+qbittorrent:
+  enabled: false
+  url: http://localhost:8080
+  username: admin
+  password: CHANGE_ME
+  pollInterval: 30s
+  # category: ratioreign   # optional: only sync torrents in this category
