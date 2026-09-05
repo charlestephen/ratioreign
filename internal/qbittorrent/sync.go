@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -19,10 +20,42 @@ type Sync struct {
 	PollInterval time.Duration
 
 	seen map[string]bool
+
+	mu         sync.Mutex
+	lastPollAt time.Time
+	lastError  string
+	trackedN   int
 }
 
 func NewSync(client *Client, dir, category string, pollInterval time.Duration) *Sync {
 	return &Sync{Client: client, Dir: dir, Category: category, PollInterval: pollInterval, seen: make(map[string]bool)}
+}
+
+// Status is a snapshot of the sync loop's health, exposed over the API so a
+// broken connection (wrong URL, blocked by a firewall, rejected by
+// qBittorrent) is visible from the web UI instead of only in container logs.
+type Status struct {
+	LastPollAt time.Time `json:"lastPollAt"`
+	LastError  string    `json:"lastError,omitempty"`
+	Tracked    int       `json:"torrentsTracked"`
+}
+
+func (s *Sync) Status() Status {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return Status{LastPollAt: s.lastPollAt, LastError: s.lastError, Tracked: s.trackedN}
+}
+
+func (s *Sync) setResult(err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastPollAt = time.Now()
+	s.trackedN = len(s.seen)
+	if err != nil {
+		s.lastError = err.Error()
+	} else {
+		s.lastError = ""
+	}
 }
 
 // Run logs in and polls until stop is closed. Login/poll errors are logged
@@ -53,17 +86,20 @@ func (s *Sync) poll(ctx context.Context) {
 	if IsNotAuthenticated(err) {
 		if loginErr := s.Client.Login(ctx); loginErr != nil {
 			slog.Warn("qbittorrent: re-login failed", "error", loginErr)
+			s.setResult(loginErr)
 			return
 		}
 		torrents, err = s.Client.ListTorrents(ctx, s.Category)
 	}
 	if err != nil {
 		slog.Warn("qbittorrent: failed to list torrents", "error", err)
+		s.setResult(err)
 		return
 	}
 
 	if err := os.MkdirAll(s.Dir, 0o755); err != nil {
 		slog.Warn("qbittorrent: cannot create torrents dir", "dir", s.Dir, "error", err)
+		s.setResult(err)
 		return
 	}
 
@@ -88,4 +124,6 @@ func (s *Sync) poll(ctx context.Context) {
 		slog.Info("qbittorrent: synced torrent", "name", info.Name, "hash", info.Hash)
 		s.seen[info.Hash] = true
 	}
+
+	s.setResult(nil)
 }
