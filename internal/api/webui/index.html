@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RatioReign</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f5f5f5; --fg: #1a1a1a; --card: #ffffff; --border: #d8d8d8;
+    --accent: #2563eb; --danger: #dc2626; --ok: #16a34a; --muted: #6b6b6b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #16181d; --fg: #e8e8e8; --card: #1f232a; --border: #333a44; --muted: #9aa0aa; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: 24px;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 0 0 12px; }
+  .sub { color: var(--muted); margin: 0 0 24px; font-size: 13px; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 16px 20px; margin-bottom: 20px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  .empty { color: var(--muted); font-style: italic; padding: 8px; }
+  label { display: block; margin: 10px 0 4px; font-size: 13px; }
+  label.inline { display: inline-flex; align-items: center; gap: 6px; margin-right: 16px; }
+  input[type=text], input[type=number], input[type=password], input[type=url], select {
+    width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px;
+    background: var(--bg); color: var(--fg); font-size: 13px;
+  }
+  input[type=checkbox] { width: auto; }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .row > div { flex: 1; min-width: 180px; }
+  .feed-row { display: flex; gap: 8px; align-items: end; margin-bottom: 8px; }
+  .feed-row > div { flex: 1; }
+  .feed-row .name { flex: 0 0 140px; }
+  .feed-row .interval { flex: 0 0 100px; }
+  button {
+    background: var(--accent); color: #fff; border: none; border-radius: 4px;
+    padding: 7px 14px; font-size: 13px; cursor: pointer;
+  }
+  button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  button.danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); padding: 3px 10px; }
+  button.small { padding: 3px 10px; }
+  button:disabled { opacity: .5; cursor: default; }
+  .msg { margin-top: 10px; font-size: 13px; }
+  .msg.ok { color: var(--ok); }
+  .msg.err { color: var(--danger); }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  fieldset { border: 1px solid var(--border); border-radius: 6px; margin: 16px 0 0; padding: 12px 16px; }
+  legend { color: var(--muted); font-size: 13px; padding: 0 6px; }
+  .footer-actions { margin-top: 18px; display: flex; align-items: center; gap: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<h1>RatioReign</h1>
+<p class="sub">Fake-seeding tracker daemon — status and configuration.</p>
+
+<div class="card">
+  <h2>Torrents</h2>
+  <table id="torrents-table">
+    <thead><tr>
+      <th>Name</th><th>Uploaded</th><th>Ratio</th><th>Seeders</th><th>Leechers</th>
+      <th>Active</th><th>Last error</th><th></th>
+    </tr></thead>
+    <tbody><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
+  </table>
+
+  <form id="upload-form" style="margin-top:16px; display:flex; gap:8px; align-items:center;">
+    <input type="file" id="upload-file" accept=".torrent" required>
+    <button type="submit">Upload .torrent</button>
+    <span id="upload-msg" class="msg"></span>
+  </form>
+</div>
+
+<div class="card" id="qbt-status-card" style="display:none">
+  <h2>qBittorrent sync</h2>
+  <table>
+    <tr><th style="width:160px">Last poll</th><td id="qbt-last-poll">—</td></tr>
+    <tr><th>Torrents tracked</th><td id="qbt-tracked">—</td></tr>
+    <tr><th>Last error</th><td id="qbt-error">—</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Configuration</h2>
+  <form id="config-form">
+    <div class="row">
+      <div>
+        <label for="f-listenAddr">API listen address</label>
+        <input type="text" id="f-listenAddr" required>
+      </div>
+      <div>
+        <label for="f-clientProfile">Client profile</label>
+        <select id="f-clientProfile" required></select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label for="f-minRate">Min upload rate (kB/s)</label>
+        <input type="number" id="f-minRate" min="0" required>
+      </div>
+      <div>
+        <label for="f-maxRate">Max upload rate (kB/s)</label>
+        <input type="number" id="f-maxRate" min="0" required>
+      </div>
+      <div>
+        <label for="f-simSeed">Simultaneous seeds</label>
+        <input type="number" id="f-simSeed" min="1" required>
+      </div>
+      <div>
+        <label for="f-ratioTarget">Upload ratio target (-1 = disabled)</label>
+        <input type="number" id="f-ratioTarget" step="0.01" required>
+      </div>
+    </div>
+
+    <label class="inline"><input type="checkbox" id="f-keepZero"> Keep seeding torrents with zero leechers</label>
+
+    <fieldset>
+      <legend>Paths</legend>
+      <p class="hint">Container paths — changing these without updating your volume mounts will break things.</p>
+      <div class="row">
+        <div><label for="f-torrentsDir">Torrents dir (watched folder)</label><input type="text" id="f-torrentsDir" required></div>
+        <div><label for="f-archiveDir">Archive dir</label><input type="text" id="f-archiveDir" required></div>
+        <div><label for="f-profilesDir">Profiles dir</label><input type="text" id="f-profilesDir" required></div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>RSS feeds</legend>
+      <div id="rss-rows"></div>
+      <button type="button" class="secondary small" id="rss-add">+ Add feed</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>qBittorrent sync</legend>
+      <label class="inline"><input type="checkbox" id="f-qbt-enabled"> Enabled</label>
+      <div class="row">
+        <div><label for="f-qbt-url">URL</label><input type="url" id="f-qbt-url" placeholder="http://localhost:8080"></div>
+        <div><label for="f-qbt-username">Username</label><input type="text" id="f-qbt-username"></div>
+        <div><label for="f-qbt-password">Password</label><input type="password" id="f-qbt-password"></div>
+      </div>
+      <p class="hint" id="qbt-password-hint"></p>
+      <div class="row">
+        <div><label for="f-qbt-poll">Poll interval</label><input type="text" id="f-qbt-poll" placeholder="30s"></div>
+        <div><label for="f-qbt-category">Category filter (optional)</label><input type="text" id="f-qbt-category"></div>
+      </div>
+      <div class="footer-actions">
+        <button type="button" class="secondary" id="qbt-test">Test connection</button>
+        <span id="qbt-test-msg" class="msg"></span>
+      </div>
+    </fieldset>
+
+    <div class="footer-actions">
+      <button type="submit">Save &amp; restart</button>
+      <span id="config-msg" class="msg"></span>
+    </div>
+  </form>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+function humanBytes(n) {
+  if (n < 1024) return n + ' B';
+  const units = ['KB','MB','GB','TB'];
+  let u = -1;
+  do { n /= 1024; u++; } while (n >= 1024 && u < units.length - 1);
+  return n.toFixed(1) + ' ' + units[u];
+}
+
+async function api(path, opts) {
+  const resp = await fetch(path, opts);
+  const text = await resp.text();
+  let body;
+  try { body = text ? JSON.parse(text) : null; } catch { body = text; }
+  if (!resp.ok) {
+    const msg = (body && body.error) ? body.error : (typeof body === 'string' ? body : resp.statusText);
+    throw new Error(msg);
+  }
+  return body;
+}
+
+// ---- torrents ----
+
+async function refreshTorrents() {
+  let torrents;
+  try { torrents = await api('/api/torrents'); }
+  catch (e) { return; }
+  const tbody = document.querySelector('#torrents-table tbody');
+  if (!torrents.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty">No torrents yet — upload one below, or enable RSS/qBittorrent intake.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = torrents.map(t => `
+    <tr>
+      <td>${escapeHtml(t.name)}</td>
+      <td>${humanBytes(t.uploaded)}</td>
+      <td>${t.ratio.toFixed(3)}</td>
+      <td>${t.seeders}</td>
+      <td>${t.leechers}</td>
+      <td>${t.active ? 'yes' : 'waiting'}</td>
+      <td>${t.lastError ? escapeHtml(t.lastError) : ''}</td>
+      <td><button class="danger small" data-hash="${t.infoHash}">Remove</button></td>
+    </tr>
+  `).join('');
+  tbody.querySelectorAll('button[data-hash]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      await api('/api/torrents/' + btn.dataset.hash, { method: 'DELETE' });
+      refreshTorrents();
+    });
+  });
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+$('upload-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const msg = $('upload-msg');
+  const file = $('upload-file').files[0];
+  if (!file) return;
+  const form = new FormData();
+  form.append('torrent', file);
+  msg.textContent = 'Uploading…'; msg.className = 'msg';
+  try {
+    await api('/api/torrents', { method: 'POST', body: form });
+    msg.textContent = 'Added.'; msg.className = 'msg ok';
+    $('upload-file').value = '';
+    refreshTorrents();
+  } catch (e) {
+    msg.textContent = e.message; msg.className = 'msg err';
+  }
+});
+
+// ---- qbittorrent status ----
+
+async function refreshQbtStatus() {
+  let status;
+  try { status = await api('/api/qbittorrent/status'); }
+  catch (e) { return; }
+  if (!status.enabled) { $('qbt-status-card').style.display = 'none'; return; }
+  $('qbt-status-card').style.display = '';
+  $('qbt-last-poll').textContent = status.lastPollAt && status.lastPollAt !== '0001-01-01T00:00:00Z'
+    ? new Date(status.lastPollAt).toLocaleString() : 'never yet';
+  $('qbt-tracked').textContent = status.torrentsTracked;
+  $('qbt-error').textContent = status.lastError || 'none';
+}
+
+// ---- config ----
+
+let rssRowId = 0;
+function addRssRow(feed) {
+  feed = feed || { name: '', url: '', pollInterval: '' };
+  const id = rssRowId++;
+  const div = document.createElement('div');
+  div.className = 'feed-row';
+  div.dataset.id = id;
+  div.innerHTML = `
+    <div class="name"><input type="text" placeholder="name" value="${escapeAttr(feed.name)}"></div>
+    <div><input type="url" placeholder="https://tracker.example/rss?key=..." value="${escapeAttr(feed.url)}"></div>
+    <div class="interval"><input type="text" placeholder="10m" value="${escapeAttr(feed.pollInterval)}"></div>
+    <div style="flex:0"><button type="button" class="danger small" data-remove="${id}">✕</button></div>
+  `;
+  $('rss-rows').appendChild(div);
+  div.querySelector('[data-remove]').addEventListener('click', () => div.remove());
+}
+function escapeAttr(s) { return (s || '').replace(/"/g, '&quot;'); }
+
+$('rss-add').addEventListener('click', () => addRssRow());
+
+async function loadConfig() {
+  const [cfg, profiles] = await Promise.all([api('/api/config'), api('/api/profiles')]);
+
+  const sel = $('f-clientProfile');
+  sel.innerHTML = profiles.map(p => `<option value="${p}">${p}</option>`).join('');
+  sel.value = cfg.clientProfile;
+
+  $('f-listenAddr').value = cfg.listenAddr;
+  $('f-minRate').value = cfg.minUploadRateKBs;
+  $('f-maxRate').value = cfg.maxUploadRateKBs;
+  $('f-simSeed').value = cfg.simultaneousSeed;
+  $('f-ratioTarget').value = cfg.uploadRatioTarget;
+  $('f-keepZero').checked = cfg.keepTorrentWithZeroLeechers;
+  $('f-torrentsDir').value = cfg.torrentsDir;
+  $('f-archiveDir').value = cfg.archiveDir;
+  $('f-profilesDir').value = cfg.profilesDir;
+
+  $('rss-rows').innerHTML = '';
+  (cfg.rss || []).forEach(addRssRow);
+
+  const qbt = cfg.qbittorrent || {};
+  $('f-qbt-enabled').checked = !!qbt.enabled;
+  $('f-qbt-url').value = qbt.url || '';
+  $('f-qbt-username').value = qbt.username || '';
+  $('f-qbt-password').value = '';
+  $('f-qbt-password').placeholder = qbt.passwordSet ? '(unchanged — leave blank to keep)' : '';
+  $('qbt-password-hint').textContent = qbt.passwordSet ? 'A password is currently saved; leave blank to keep it.' : '';
+  $('f-qbt-poll').value = qbt.pollInterval || '';
+  $('f-qbt-category').value = qbt.category || '';
+}
+
+function buildConfigPayload() {
+  const rss = Array.from($('rss-rows').children).map(row => {
+    const inputs = row.querySelectorAll('input');
+    return { name: inputs[0].value, url: inputs[1].value, pollInterval: inputs[2].value };
+  }).filter(f => f.url);
+
+  return {
+    listenAddr: $('f-listenAddr').value,
+    minUploadRateKBs: Number($('f-minRate').value),
+    maxUploadRateKBs: Number($('f-maxRate').value),
+    simultaneousSeed: Number($('f-simSeed').value),
+    clientProfile: $('f-clientProfile').value,
+    keepTorrentWithZeroLeechers: $('f-keepZero').checked,
+    uploadRatioTarget: Number($('f-ratioTarget').value),
+    torrentsDir: $('f-torrentsDir').value,
+    archiveDir: $('f-archiveDir').value,
+    profilesDir: $('f-profilesDir').value,
+    rss,
+    qbittorrent: {
+      enabled: $('f-qbt-enabled').checked,
+      url: $('f-qbt-url').value,
+      username: $('f-qbt-username').value,
+      password: $('f-qbt-password').value,
+      pollInterval: $('f-qbt-poll').value,
+      category: $('f-qbt-category').value,
+    },
+  };
+}
+
+$('qbt-test').addEventListener('click', async () => {
+  const msg = $('qbt-test-msg');
+  msg.textContent = 'Testing…'; msg.className = 'msg';
+  try {
+    const result = await api('/api/qbittorrent/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: $('f-qbt-url').value,
+        username: $('f-qbt-username').value,
+        password: $('f-qbt-password').value,
+      }),
+    });
+    msg.textContent = result.message;
+    msg.className = 'msg ' + (result.success ? 'ok' : 'err');
+  } catch (e) {
+    msg.textContent = e.message; msg.className = 'msg err';
+  }
+});
+
+$('config-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const msg = $('config-msg');
+  msg.textContent = 'Saving…'; msg.className = 'msg';
+  try {
+    await api('/api/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildConfigPayload()),
+    });
+  } catch (e) {
+    msg.textContent = e.message; msg.className = 'msg err';
+    return;
+  }
+  msg.textContent = 'Saved — restarting…'; msg.className = 'msg ok';
+  await waitForRestart();
+  location.reload();
+});
+
+async function waitForRestart() {
+  // The process is about to exit for the container's restart policy to
+  // bring it back up; poll /healthz until it does (or give up after 30s).
+  await new Promise(r => setTimeout(r, 1500));
+  for (let i = 0; i < 30; i++) {
+    try {
+      const resp = await fetch('/healthz');
+      if (resp.ok) return;
+    } catch {}
+    await new Promise(r => setTimeout(r, 1000));
+  }
+}
+
+// ---- init ----
+
+refreshTorrents();
+refreshQbtStatus();
+loadConfig().catch(e => {
+  $('config-msg').textContent = 'Failed to load config: ' + e.message;
+  $('config-msg').className = 'msg err';
+});
+setInterval(refreshTorrents, 3000);
+setInterval(refreshQbtStatus, 5000);
+</script>
+</body>
+</html>
