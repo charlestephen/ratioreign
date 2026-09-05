@@ -78,20 +78,38 @@ func main() {
 		slog.Info("rss feeds enabled", "count", len(feeds))
 	}
 
+	var qbSync *qbittorrent.Sync
 	if cfg.QBittorrent != nil && cfg.QBittorrent.Enabled {
 		qbClient, err := qbittorrent.NewClient(cfg.QBittorrent.URL, cfg.QBittorrent.Username, cfg.QBittorrent.Password)
 		if err != nil {
 			slog.Error("failed to create qbittorrent client", "error", err)
 			os.Exit(1)
 		}
-		qbSync := qbittorrent.NewSync(qbClient, cfg.TorrentsDir, cfg.QBittorrent.Category, cfg.QBittorrent.PollInterval)
+		qbSync = qbittorrent.NewSync(qbClient, cfg.TorrentsDir, cfg.QBittorrent.Category, cfg.QBittorrent.PollInterval)
 		go qbSync.Run(stop)
 		slog.Info("qbittorrent sync enabled", "url", cfg.QBittorrent.URL)
 	}
 
 	go mgr.Run(stop)
 
-	srv := &http.Server{Addr: cfg.ListenAddr, Handler: api.New(mgr)}
+	// A config saved through the web UI is applied by exiting cleanly and
+	// letting the container's restart policy bring the process back up
+	// reading the new file — see the api package's doc comment for why.
+	restartCh := make(chan struct{}, 1)
+	requestRestart := func() {
+		select {
+		case restartCh <- struct{}{}:
+		default:
+		}
+	}
+
+	srv := &http.Server{Addr: cfg.ListenAddr, Handler: api.New(api.Deps{
+		Manager:         mgr,
+		Config:          cfg,
+		ConfigPath:      *configPath,
+		QBittorrentSync: qbSync,
+		RequestRestart:  requestRestart,
+	})}
 	go func() {
 		slog.Info("api listening", "addr", cfg.ListenAddr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -101,8 +119,12 @@ func main() {
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
-	<-sigCh
-	slog.Info("shutting down")
+	select {
+	case <-sigCh:
+		slog.Info("shutting down")
+	case <-restartCh:
+		slog.Info("config changed via web UI, restarting")
+	}
 
 	close(stop) // triggers stopped-announces for every active torrent
 
