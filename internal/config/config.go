@@ -85,13 +85,37 @@ func Load(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("config: %s: %w", path, err)
 	}
-	if err := cfg.validate(); err != nil {
+	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("config: %s: %w", path, err)
 	}
 	return &cfg, nil
 }
 
-func (c *Config) validate() error {
+// Save validates c and writes it to path as YAML. The write goes through a
+// temp file + rename so a crash mid-write (or the process reading its own
+// config concurrently) never sees a half-written file.
+func (c *Config) Save(path string) error {
+	if err := c.Validate(); err != nil {
+		return err
+	}
+	data, err := yaml.Marshal(c)
+	if err != nil {
+		return fmt.Errorf("config: marshal: %w", err)
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return fmt.Errorf("config: write: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("config: rename: %w", err)
+	}
+	return nil
+}
+
+// Validate checks the config for internally-inconsistent values. Load calls
+// this automatically; the web UI's config-save handler calls it again on a
+// submitted config before writing it to disk.
+func (c *Config) Validate() error {
 	if c.MinUploadRateKBs < 0 {
 		return fmt.Errorf("minUploadRateKBs must be >= 0")
 	}

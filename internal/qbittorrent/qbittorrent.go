@@ -13,6 +13,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"strings"
+	"time"
 )
 
 func decodeJSON(r io.Reader, v any) error {
@@ -26,18 +27,51 @@ type Client struct {
 	http     *http.Client
 }
 
+// NewClient builds a client for the qBittorrent instance at baseURL.
+//
+// baseURL is admin-supplied configuration (config.yaml's qbittorrent.url, or
+// the web UI's "Test connection" field) — connecting to wherever the admin
+// points it is this feature's entire purpose, not attacker-controlled input
+// to be sanitized against an allowlist. What's still worth hardening
+// regardless: the scheme (reject anything but http/https up front, with a
+// clear error, rather than letting a typo silently fail deeper in the HTTP
+// stack) and redirects (disabled below) — qBittorrent's WebUI API never
+// legitimately redirects, so there's no reason to let a compromised or
+// misconfigured target redirect our login POST (credentials, cookies)
+// somewhere else.
 func NewClient(baseURL, username, password string) (*Client, error) {
+	trimmed := strings.TrimRight(baseURL, "/")
+	u, err := url.Parse(trimmed)
+	if err != nil {
+		return nil, fmt.Errorf("qbittorrent: invalid url %q: %w", baseURL, err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return nil, fmt.Errorf("qbittorrent: url must be http:// or https://, got %q", baseURL)
+	}
+
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		return nil, err
 	}
 	return &Client{
-		baseURL:  strings.TrimRight(baseURL, "/"),
+		baseURL:  trimmed,
 		username: username,
 		password: password,
-		http:     &http.Client{Jar: jar},
+		http: &http.Client{
+			Jar: jar,
+			// Behind a VPN sidecar (Gluetun) a blocked or not-yet-up
+			// connection can otherwise hang indefinitely instead of
+			// failing — every other HTTP client in this codebase sets a
+			// timeout for the same reason.
+			Timeout: 15 * time.Second,
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return errNoRedirects
+			},
+		},
 	}, nil
 }
+
+var errNoRedirects = fmt.Errorf("qbittorrent: refusing to follow a redirect from the configured qBittorrent URL")
 
 // Login authenticates and stores the SID session cookie in the client's
 // cookie jar for subsequent requests.
@@ -88,7 +122,7 @@ func (c *Client) ListTorrents(ctx context.Context, category string) ([]TorrentIn
 		return nil, err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusForbidden {
+	if isAuthFailure(resp.StatusCode) {
 		return nil, errNotAuthenticated
 	}
 	if resp.StatusCode != http.StatusOK {
@@ -114,7 +148,7 @@ func (c *Client) ExportTorrent(ctx context.Context, hash string) ([]byte, error)
 		return nil, err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusForbidden {
+	if isAuthFailure(resp.StatusCode) {
 		return nil, errNotAuthenticated
 	}
 	if resp.StatusCode == http.StatusNotFound {
@@ -127,6 +161,16 @@ func (c *Client) ExportTorrent(ctx context.Context, hash string) ([]byte, error)
 }
 
 var errNotAuthenticated = fmt.Errorf("qbittorrent: not authenticated (session expired)")
+
+// isAuthFailure reports whether status indicates the request was rejected
+// for lack of (or an expired) session, rather than some other error.
+// qBittorrent's WebUI API normally returns 403 for this, but a request
+// blocked by "Host header validation" (a reverse-proxy/CSRF hardening
+// feature added in qBittorrent 4.6.1) is rejected earlier in the stack and
+// surfaces as a plain 401 instead — treat both as "log in again".
+func isAuthFailure(statusCode int) bool {
+	return statusCode == http.StatusForbidden || statusCode == http.StatusUnauthorized
+}
 
 // IsNotAuthenticated reports whether err indicates the session cookie
 // expired and Login should be retried.
