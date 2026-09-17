@@ -33,7 +33,17 @@ from this entry onward. Format loosely follows
   static analysis via `codacy/codacy-analysis-cli-action` in its
   account-free "GitHub code scanning" mode; results land in the repo's
   Security tab alongside CodeQL's, no Codacy account or project token
-  required. (A full Codacy dashboard integration is a separate opt-in the
+  required. Took three iterations to get green: (1) its SARIF upload
+  collided in category with Trivy's — fixed with an explicit `category:`
+  on each; (2) Codacy's own bundled `trivy` sub-tool crashed needing
+  pattern config only a codacy.com-registered project has — disabled it
+  via `.codacy.yml`; (3) in practice almost every other Codacy tool
+  (GoSec, StaticCheck, ClangTidy, docker tools) gets skipped in this mode
+  for a Go-only repo regardless, so the job is now wired with
+  `continue-on-error` on the analysis step and only uploads when it
+  actually produces a usable SARIF file — Codacy's own internal tool
+  failures can no longer fail CI. (A full Codacy dashboard integration,
+  which would make GoSec analysis actually run, is a separate opt-in the
   user can add later if wanted — see the README's CI section.)
 - **Trivy container vulnerability scanning**
   (`.github/workflows/trivy.yml`) — builds a single-arch image from the

@@ -22,18 +22,29 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Run Codacy Analysis CLI
+        # Codacy's default tool selection includes engines (its bundled
+        # trivy) that need config only a codacy.com-registered project has
+        # ("no patterns configured") — that crashes this specific tool, not
+        # the whole scan, but the crash still exits non-zero. Don't let a
+        # third-party tool's internal failure fail our CI: this step only
+        # ever reports findings (via the upload step below, when it
+        # produces a usable file), same as the CodeQL job never fails the
+        # build on findings either.
+        continue-on-error: true
         uses: codacy/codacy-analysis-cli-action@d43360362776a6789b47b99ae8973510854e2d3d # master
         with:
           output: results.sarif
           format: sarif
           gh-code-scanning-compat: true
-          # This job only reports findings (to GitHub's Security tab, via
-          # the upload step below); it never fails the build on its own —
-          # letting GitHub's own code-scanning alert thresholds decide
-          # what's actionable keeps this consistent with the CodeQL job.
           max-allowed-issues: 2147483647
 
+      - name: Check for usable SARIF output
+        id: sarif
+        if: always()
+        run: echo "exists=$(test -s results.sarif && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
       - name: Upload SARIF results
+        if: steps.sarif.outputs.exists == 'true'
         uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4
         with:
           sarif_file: results.sarif

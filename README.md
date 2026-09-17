@@ -280,10 +280,18 @@ Every push/PR runs (see [`.github/workflows/`](.github/workflows/)):
   workflows themselves).
 - **Codacy** — a second static-analysis pass via the account-free
   `codacy/codacy-analysis-cli-action` "GitHub code scanning" mode; results
-  land in the same Security tab as CodeQL's, no Codacy account needed. (A
-  full Codacy dashboard is a separate, later opt-in — see their
+  land in the same Security tab as CodeQL's, no Codacy account needed. In
+  practice, for a Go-only repo like this one, most of Codacy's tool
+  selection ends up skipped in this mode (GoSec is client-side-only here;
+  their bundled Trivy needs pattern config that only exists for a
+  codacy.com-registered project, so it's disabled via `.codacy.yml`) — the
+  job is wired to never fail CI on Codacy's own internal tool failures and
+  to only upload when it actually produces something. A full Codacy
+  dashboard integration (which would make its Go/GoSec analysis work) is a
+  separate, later opt-in — see their
   [GitHub Action docs](https://github.com/codacy/codacy-analysis-cli-action)
-  — not configured here since it needs an external account.)
+  — not configured here since it needs an external account and a project
+  token.
 - **Trivy** — container image vulnerability scan (CRITICAL/HIGH), also
   reported to the Security tab.
 - **GitGuardian** — secret-scanning on every PR.
