@@ -4,7 +4,7 @@ All notable changes to RatioReign are documented in this file, starting
 from this entry onward. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/).
 
-## 2026-09-17
+## [0.1.0] - 2026-09-17
 
 ### Added
 
@@ -58,6 +58,15 @@ from this entry onward. Format loosely follows
   have) as the free, no-account-needed industry standard.
 - `CHANGELOG.md` (this file) — going forward, updated with every
   significant change, not just at release/tag time.
+- **Tag-triggered GitHub Releases** (`.github/workflows/release.yml`).
+  Pushing a `v*` tag (e.g. `v0.1.0`) extracts that version's section from
+  this changelog (matched by its `## [x.y.z]` header) and publishes it as
+  the GitHub Release notes automatically — the changelog entry *is* the
+  release notes, written once. The same tag push already triggers
+  `build.yml`'s existing `type=semver` image tags, so the image and the
+  release are two views of the same tag rather than separate manual
+  steps. Changed headers from `## 2026-09-17` to `## [0.1.0] - 2026-09-17`
+  to make each version's section machine-extractable.
 
 ### Changed
 
