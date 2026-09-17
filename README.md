@@ -62,12 +62,16 @@ or hand-copied from a Joal install drop straight into `profiles/` unmodified.
 
 ## Quick start
 
+Create `config/config.yaml` (see [Configuration](#configuration) below for
+every field — at minimum pick a `clientProfile`) and an empty `data/`
+directory, then run the published image:
+
 ```bash
-git clone https://github.com/charlestephen/ratioreign.git && cd ratioreign
-go build -o ratioreign ./cmd/ratioreign
-cp config/config.example.yaml config/config.yaml
-# edit config/config.yaml: at minimum pick a clientProfile
-./ratioreign -config config/config.yaml
+podman run -d --replace --name ratioreign --user 1000:1000 \
+  -p 7070:7070 \
+  -v $PWD/config:/app/config \
+  -v $PWD/data:/app/data \
+  ghcr.io/charlestephen/ratioreign:latest
 ```
 
 Open `http://localhost:7070/` for the web UI, or drop a `.torrent` file into
@@ -76,24 +80,6 @@ up:
 
 ```bash
 curl -s localhost:7070/api/torrents | jq
-```
-
-### Container
-
-```bash
-cp config/config.example.yaml config/config.yaml
-docker compose up -d --build
-```
-
-or with plain `docker`/`podman`:
-
-```bash
-docker build -t ratioreign -f Containerfile .
-docker run -d --name ratioreign \
-  -p 7070:7070 \
-  -v $PWD/config:/app/config \
-  -v $PWD/data:/app/data \
-  ratioreign
 ```
 
 ## Configuration
@@ -156,15 +142,15 @@ qBittorrent's actual response — the exact status/body distinguishes these:
    `network_mode: "service:gluetun"` (shares Gluetun's network namespace,
    same as qBittorrent), there is no separate container hostname to reach it
    by — use `http://localhost:8080` (or `127.0.0.1`), not a container name.
-   If RatioReign is a *separate* container that just shares Gluetun's Docker
-   network, and qBittorrent is *also* `network_mode: "service:gluetun"`, it
+   If RatioReign is a *separate* container that just shares Gluetun's
+   container network, and qBittorrent is *also* `network_mode: "service:gluetun"`, it
    has no network identity of its own either — reach it via Gluetun's own
    container name/port (e.g. `http://gluetun:8080`), not `qbittorrent:8080`.
-2. **Gluetun's firewall blocks the Docker bridge by default.** If RatioReign
-   shares Gluetun's network namespace, it inherits Gluetun's iptables rules,
-   which by default only allow the VPN tunnel — not traffic to other
-   containers on your Docker bridge network. Set
-   `FIREWALL_OUTBOUND_SUBNETS=<your docker bridge subnet>` (e.g.
+2. **Gluetun's firewall blocks the container bridge network by default.** If
+   RatioReign shares Gluetun's network namespace, it inherits Gluetun's
+   iptables rules, which by default only allow the VPN tunnel — not traffic
+   to other containers on your bridge network. Set
+   `FIREWALL_OUTBOUND_SUBNETS=<your bridge subnet>` (e.g.
    `172.17.0.0/16`) on the **Gluetun** container's environment.
 3. **qBittorrent's Host header validation** (Options → Web UI → "Enable
    Host header validation", on by default since qBittorrent 4.6.1) rejects
@@ -259,12 +245,32 @@ for a complete example. Fields:
 | `GET` | `/api/qbittorrent/status` | Sync health: `enabled`, `lastPollAt`, `lastError`, `torrentsTracked`. |
 | `POST` | `/api/qbittorrent/test` | Test a qBittorrent login (`{url, username, password}`) without saving it; returns the exact success/failure message. |
 
-## Development
+## Development Quick Start
+
+```bash
+git clone https://github.com/charlestephen/ratioreign.git && cd ratioreign
+go build -o ratioreign ./cmd/ratioreign
+cp config/config.example.yaml config/config.yaml
+# edit config/config.yaml: at minimum pick a clientProfile
+./ratioreign -config config/config.yaml
+```
 
 ```bash
 go build ./...
 go vet ./...
 go test ./...
+```
+
+To build and run the container image locally instead of pulling the
+published one (e.g. to test a Containerfile change):
+
+```bash
+podman build -t ratioreign -f Containerfile .
+podman run -d --replace --name ratioreign --user 1000:1000 \
+  -p 7070:7070 \
+  -v $PWD/config:/app/config \
+  -v $PWD/data:/app/data \
+  ratioreign
 ```
 
 ## CI and security scanning

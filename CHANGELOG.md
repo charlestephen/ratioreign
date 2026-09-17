@@ -74,8 +74,31 @@ from this entry onward. Format loosely follows
   ruleset issue above was unresolved were merged: `docker/setup-buildx-action`
   and `docker/setup-qemu-action` digest updates (#15, #16).
 
+- **README simplified to a container-first Quick Start.** The published
+  `ghcr.io/charlestephen/ratioreign` image is now the primary path — a
+  single `podman run` command, no repo clone or local build required.
+  The old clone/build/run-from-source flow moved to a renamed
+  **Development Quick Start** section, alongside a `podman build` +
+  `podman run` option for testing local Containerfile changes. All
+  user-facing example commands now use `podman` instead of `docker`
+  (`docker compose`/`docker build`/`docker run` are gone); references to
+  the real Docker Hub registry and GitHub Actions' `docker/*` tooling
+  are unchanged since those name actual external things, not a CLI
+  choice.
+
 ### Fixed / Investigated
 
+- **Container image CVEs (1 high, 4 medium, 10 low), all the same root
+  cause.** Trivy flagged `libssl3`/`libcrypto3` in the `alpine:3.24`
+  runtime image at `3.5.7-r0`, one patch behind the fixed `3.5.8-r0`
+  (CVE-2026-14456 high; CVE-2026-75803/63076/63072/18798 medium; several
+  more low). Added `apk upgrade --no-cache` to the Containerfile's
+  runtime stage so pinned base-image digests can't silently carry
+  already-fixed OS package CVEs between Renovate's digest bumps.
+  Verified by building the image locally and checking the installed
+  package versions directly (`apk list -I`) — confirmed
+  `libssl3-3.5.8-r0` / `libcrypto3-3.5.8-r0`, not just assumed from the
+  Containerfile diff.
 - **Confirmed, not assumed: qBittorrent's WebUI API cannot receive fake
   ratio credit.** Checked all 46 documented torrent-management endpoints
   directly against qBittorrent's own API reference — none can set or add
