@@ -4,7 +4,7 @@ All notable changes to RatioReign are documented in this file, starting
 from this entry onward. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/).
 
-## [0.1.0] - 2026-09-17
+## [1.0.1] - 2026-09-17
 
 ### Added
 
