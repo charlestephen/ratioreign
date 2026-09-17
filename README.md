@@ -278,20 +278,18 @@ Every push/PR runs (see [`.github/workflows/`](.github/workflows/)):
   required for the Docker Hub half).
 - **CodeQL** — security + code-quality static analysis (Go and the
   workflows themselves).
-- **Codacy** — a second static-analysis pass via the account-free
-  `codacy/codacy-analysis-cli-action` "GitHub code scanning" mode; results
-  land in the same Security tab as CodeQL's, no Codacy account needed. In
-  practice, for a Go-only repo like this one, most of Codacy's tool
-  selection ends up skipped in this mode (GoSec is client-side-only here;
-  their bundled Trivy needs pattern config that only exists for a
-  codacy.com-registered project, so it's disabled via `.codacy.yml`) — the
-  job is wired to never fail CI on Codacy's own internal tool failures and
-  to only upload when it actually produces something. A full Codacy
-  dashboard integration (which would make its Go/GoSec analysis work) is a
-  separate, later opt-in — see their
-  [GitHub Action docs](https://github.com/codacy/codacy-analysis-cli-action)
-  — not configured here since it needs an external account and a project
-  token.
+- **golangci-lint** — a second static-analysis pass, this one Go-specific:
+  ~50 bundled linters (staticcheck, errcheck, unused, govet, and more) via
+  the official `golangci/golangci-lint-action`, no account needed. Results
+  land in the same Security tab as CodeQL's via native SARIF output
+  (`--output.sarif.path`). Replaced an earlier Codacy integration
+  (`codacy/codacy-analysis-cli-action`) that, in its account-free mode,
+  turned out not to work for a Go-only repo at all — its Go-relevant tools
+  (GoSec, bundled Trivy) either got silently skipped or crashed needing
+  config only a codacy.com-registered project has, so the job ran green
+  without ever producing a real finding. golangci-lint needs no account
+  and, verified locally before adopting it, actually finds real issues in
+  this codebase.
 - **Trivy** — container image vulnerability scan (CRITICAL/HIGH), also
   reported to the Security tab.
 - **GitGuardian** — secret-scanning on every PR.

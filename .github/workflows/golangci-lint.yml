@@ -1,0 +1,48 @@
+name: golangci-lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  golangci-lint:
+    name: golangci-lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+
+      - name: Run golangci-lint
+        # A linter is designed to exit non-zero when it finds issues --
+        # that's normal, not a broken run. This repo's other scanners
+        # (CodeQL, Trivy) only report findings via the Security tab
+        # rather than failing the build outright; keep golangci-lint
+        # consistent with that instead of making it a separate hard gate
+        # duplicating go vet (already a hard gate in build.yml's Test job).
+        continue-on-error: true
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.13.2
+          args: --output.sarif.path=golangci-lint.sarif
+
+      - name: Check for usable SARIF output
+        id: sarif
+        if: always()
+        run: echo "exists=$(test -s golangci-lint.sarif && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload SARIF results
+        if: steps.sarif.outputs.exists == 'true'
+        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4
+        with:
+          sarif_file: golangci-lint.sarif
+          category: golangci-lint

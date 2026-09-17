@@ -29,22 +29,27 @@ from this entry onward. Format loosely follows
 - **Alternating row colors** (zebra striping) on the torrent table for
   readability, using a theme-aware CSS variable so it works in both light
   and dark mode rather than hardcoding white.
-- **Codacy security/quality scanning** (`.github/workflows/codacy.yml`) —
-  static analysis via `codacy/codacy-analysis-cli-action` in its
-  account-free "GitHub code scanning" mode; results land in the repo's
-  Security tab alongside CodeQL's, no Codacy account or project token
-  required. Took three iterations to get green: (1) its SARIF upload
-  collided in category with Trivy's — fixed with an explicit `category:`
-  on each; (2) Codacy's own bundled `trivy` sub-tool crashed needing
-  pattern config only a codacy.com-registered project has — disabled it
-  via `.codacy.yml`; (3) in practice almost every other Codacy tool
-  (GoSec, StaticCheck, ClangTidy, docker tools) gets skipped in this mode
-  for a Go-only repo regardless, so the job is now wired with
-  `continue-on-error` on the analysis step and only uploads when it
-  actually produces a usable SARIF file — Codacy's own internal tool
-  failures can no longer fail CI. (A full Codacy dashboard integration,
-  which would make GoSec analysis actually run, is a separate opt-in the
-  user can add later if wanted — see the README's CI section.)
+- **golangci-lint** (`.github/workflows/golangci-lint.yml`) — Go-specific
+  static analysis: ~50 bundled linters (staticcheck, errcheck, unused,
+  govet, and more) via the official `golangci/golangci-lint-action`, no
+  account needed, native SARIF output straight to the Security tab
+  alongside CodeQL's. Verified locally before adopting it — a real run
+  against this codebase found 9 genuine issues (6 unchecked error returns,
+  2 De Morgan simplifications, 1 dead struct field), confirming it
+  actually works, unlike what it replaced (see below).
+  - *Superseded attempt*: Codacy security/quality scanning via
+    `codacy/codacy-analysis-cli-action`'s account-free "GitHub code
+    scanning" mode was tried first and, after three rounds of fixes (a
+    SARIF-category collision with Trivy's upload; Codacy's own bundled
+    `trivy` sub-tool crashing on missing pattern config only a
+    codacy.com-registered project has; wiring both the analysis and
+    upload steps with `continue-on-error` so Codacy's internal failures
+    couldn't fail CI), the job ran green but never actually produced a
+    usable finding for this repo — in this mode almost every Codacy tool
+    relevant to Go (GoSec, StaticCheck, its bundled Trivy) gets skipped or
+    crashes without a paid/free Codacy account. Removed
+    (`.github/workflows/codacy.yml`, `.codacy.yml`) in favor of
+    golangci-lint, which needs no account and demonstrably works.
 - **Trivy container vulnerability scanning**
   (`.github/workflows/trivy.yml`) — builds a single-arch image from the
   Containerfile and scans it for CRITICAL/HIGH CVEs, reporting to the
