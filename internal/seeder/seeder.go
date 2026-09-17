@@ -71,18 +71,20 @@ type Manager struct {
 	speed     *speed.Provider
 	onArchive func(t *Torrent, reason ArchiveReason)
 
-	mu      sync.Mutex
-	items   map[string]*Torrent // keyed by info hash hex
-	running bool
+	mu        sync.Mutex
+	items     map[string]*Torrent // keyed by info hash hex
+	persisted map[string]int64    // info hash hex -> cumulative uploaded bytes, active+archived, survives restarts
+	running   bool
 }
 
 func NewManager(cfg *config.Config, prof *profile.Profile) *Manager {
 	return &Manager{
-		cfg:     cfg,
-		profile: prof,
-		client:  announce.NewClient(prof),
-		speed:   speed.NewProvider(cfg.MinUploadRateKBs, cfg.MaxUploadRateKBs, 20*time.Minute),
-		items:   make(map[string]*Torrent),
+		cfg:       cfg,
+		profile:   prof,
+		client:    announce.NewClient(prof),
+		speed:     speed.NewProvider(cfg.MinUploadRateKBs, cfg.MaxUploadRateKBs, 20*time.Minute),
+		items:     make(map[string]*Torrent),
+		persisted: loadState(cfg.StatePath),
 	}
 }
 
@@ -91,7 +93,11 @@ func NewManager(cfg *config.Config, prof *profile.Profile) *Manager {
 func (m *Manager) OnArchive(f func(t *Torrent, reason ArchiveReason)) { m.onArchive = f }
 
 // Add registers a new torrent. It starts seeding immediately if a slot is
-// free, otherwise waits in the pending queue.
+// free, otherwise waits in the pending queue. If this torrent was seeded
+// before (by info hash) and its ratio history is still on disk, Uploaded
+// resumes from there instead of starting back at zero — the same
+// across-restart accumulation qBittorrent gives a torrent via its resume
+// data.
 func (m *Manager) Add(t *torrentfile.Torrent) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -99,17 +105,20 @@ func (m *Manager) Add(t *torrentfile.Torrent) {
 	if _, exists := m.items[key]; exists {
 		return
 	}
-	m.items[key] = &Torrent{File: t, AddedAt: time.Now(), port: randomPort()}
+	m.items[key] = &Torrent{File: t, AddedAt: time.Now(), port: randomPort(), Uploaded: m.persisted[key]}
 	m.fillSlotsLocked()
 }
 
 // Remove stops seeding a torrent immediately (best-effort stopped announce)
-// and drops it.
+// and drops it, including its ratio history — an explicit removal means
+// "forget this torrent," unlike an automatic archive (see archiveLocked),
+// which keeps the history in case the same torrent is added again later.
 func (m *Manager) Remove(infoHash string) {
 	m.mu.Lock()
 	item, ok := m.items[infoHash]
 	if ok {
 		delete(m.items, infoHash)
+		delete(m.persisted, infoHash)
 	}
 	m.mu.Unlock()
 	if !ok {
@@ -119,6 +128,21 @@ func (m *Manager) Remove(infoHash string) {
 		m.sendAnnounce(context.Background(), item, "stopped")
 	}
 	m.fillSlots()
+	if err := saveState(m.cfg.StatePath, m.persistedSnapshot()); err != nil {
+		slog.Warn("seeder: failed to save state after remove", "error", err)
+	}
+}
+
+// persistedSnapshot returns a copy of the persisted-ratio map safe to hand
+// to saveState without holding m.mu while doing file I/O.
+func (m *Manager) persistedSnapshot() map[string]int64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make(map[string]int64, len(m.persisted))
+	for k, v := range m.persisted {
+		out[k] = v
+	}
+	return out
 }
 
 // Snapshot returns a stable-ordered list of all known torrents.
@@ -146,6 +170,11 @@ func (m *Manager) Snapshot() []Status {
 	return out
 }
 
+// stateSaveInterval bounds how much ratio history a crash (as opposed to a
+// clean shutdown, which always saves) can lose — a compromise between disk
+// I/O and matching qBittorrent's own periodic resume-data flushing.
+const stateSaveInterval = 60 * time.Second
+
 // Run drives the bandwidth and announce-scheduling loop until stop is
 // closed.
 func (m *Manager) Run(stop <-chan struct{}) {
@@ -153,12 +182,21 @@ func (m *Manager) Run(stop <-chan struct{}) {
 
 	tick := time.NewTicker(1 * time.Second)
 	defer tick.Stop()
+	saveTick := time.NewTicker(stateSaveInterval)
+	defer saveTick.Stop()
 	for {
 		select {
 		case <-tick.C:
 			m.tick()
+		case <-saveTick.C:
+			if err := saveState(m.cfg.StatePath, m.persistedSnapshot()); err != nil {
+				slog.Warn("seeder: failed to save state", "error", err)
+			}
 		case <-stop:
 			m.stopAll()
+			if err := saveState(m.cfg.StatePath, m.persistedSnapshot()); err != nil {
+				slog.Warn("seeder: failed to save state on shutdown", "error", err)
+			}
 			return
 		}
 	}
@@ -182,6 +220,7 @@ func (m *Manager) tick() {
 	rates := speed.Distribute(m.speed.Current(), stats)
 	for hash, bps := range rates {
 		m.items[hash].Uploaded += bps
+		m.persisted[hash] = m.items[hash].Uploaded
 	}
 	m.mu.Unlock()
 

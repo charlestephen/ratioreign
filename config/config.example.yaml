@@ -25,6 +25,11 @@ torrentsDir: ./data/torrents
 archiveDir: ./data/torrents/archived
 profilesDir: ./profiles
 
+# Where each torrent's cumulative uploaded-byte total is saved, so ratio
+# survives a restart instead of resetting to zero (like qBittorrent's own
+# resume data).
+statePath: ./data/state.json
+
 # Optional: poll RSS feeds (e.g. a private tracker's "new torrents" feed)
 # and auto-import any .torrent/enclosure link into torrentsDir.
 rss:
