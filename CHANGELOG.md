@@ -29,22 +29,27 @@ from this entry onward. Format loosely follows
 - **Alternating row colors** (zebra striping) on the torrent table for
   readability, using a theme-aware CSS variable so it works in both light
   and dark mode rather than hardcoding white.
-- **Codacy security/quality scanning** (`.github/workflows/codacy.yml`) —
-  static analysis via `codacy/codacy-analysis-cli-action` in its
-  account-free "GitHub code scanning" mode; results land in the repo's
-  Security tab alongside CodeQL's, no Codacy account or project token
-  required. Took three iterations to get green: (1) its SARIF upload
-  collided in category with Trivy's — fixed with an explicit `category:`
-  on each; (2) Codacy's own bundled `trivy` sub-tool crashed needing
-  pattern config only a codacy.com-registered project has — disabled it
-  via `.codacy.yml`; (3) in practice almost every other Codacy tool
-  (GoSec, StaticCheck, ClangTidy, docker tools) gets skipped in this mode
-  for a Go-only repo regardless, so the job is now wired with
-  `continue-on-error` on the analysis step and only uploads when it
-  actually produces a usable SARIF file — Codacy's own internal tool
-  failures can no longer fail CI. (A full Codacy dashboard integration,
-  which would make GoSec analysis actually run, is a separate opt-in the
-  user can add later if wanted — see the README's CI section.)
+- **golangci-lint** (`.github/workflows/golangci-lint.yml`) — Go-specific
+  static analysis: ~50 bundled linters (staticcheck, errcheck, unused,
+  govet, and more) via the official `golangci/golangci-lint-action`, no
+  account needed, native SARIF output straight to the Security tab
+  alongside CodeQL's. Verified locally before adopting it — a real run
+  against this codebase found 9 genuine issues (6 unchecked error returns,
+  2 De Morgan simplifications, 1 dead struct field), confirming it
+  actually works, unlike what it replaced (see below).
+  - *Superseded attempt*: Codacy security/quality scanning via
+    `codacy/codacy-analysis-cli-action`'s account-free "GitHub code
+    scanning" mode was tried first and, after three rounds of fixes (a
+    SARIF-category collision with Trivy's upload; Codacy's own bundled
+    `trivy` sub-tool crashing on missing pattern config only a
+    codacy.com-registered project has; wiring both the analysis and
+    upload steps with `continue-on-error` so Codacy's internal failures
+    couldn't fail CI), the job ran green but never actually produced a
+    usable finding for this repo — in this mode almost every Codacy tool
+    relevant to Go (GoSec, StaticCheck, its bundled Trivy) gets skipped or
+    crashes without a paid/free Codacy account. Removed
+    (`.github/workflows/codacy.yml`, `.codacy.yml`) in favor of
+    golangci-lint, which needs no account and demonstrably works.
 - **Trivy container vulnerability scanning**
   (`.github/workflows/trivy.yml`) — builds a single-arch image from the
   Containerfile and scans it for CRITICAL/HIGH CVEs, reporting to the
@@ -69,8 +74,31 @@ from this entry onward. Format loosely follows
   ruleset issue above was unresolved were merged: `docker/setup-buildx-action`
   and `docker/setup-qemu-action` digest updates (#15, #16).
 
+- **README simplified to a container-first Quick Start.** The published
+  `ghcr.io/charlestephen/ratioreign` image is now the primary path — a
+  single `podman run` command, no repo clone or local build required.
+  The old clone/build/run-from-source flow moved to a renamed
+  **Development Quick Start** section, alongside a `podman build` +
+  `podman run` option for testing local Containerfile changes. All
+  user-facing example commands now use `podman` instead of `docker`
+  (`docker compose`/`docker build`/`docker run` are gone); references to
+  the real Docker Hub registry and GitHub Actions' `docker/*` tooling
+  are unchanged since those name actual external things, not a CLI
+  choice.
+
 ### Fixed / Investigated
 
+- **Container image CVEs (1 high, 4 medium, 10 low), all the same root
+  cause.** Trivy flagged `libssl3`/`libcrypto3` in the `alpine:3.24`
+  runtime image at `3.5.7-r0`, one patch behind the fixed `3.5.8-r0`
+  (CVE-2026-14456 high; CVE-2026-75803/63076/63072/18798 medium; several
+  more low). Added `apk upgrade --no-cache` to the Containerfile's
+  runtime stage so pinned base-image digests can't silently carry
+  already-fixed OS package CVEs between Renovate's digest bumps.
+  Verified by building the image locally and checking the installed
+  package versions directly (`apk list -I`) — confirmed
+  `libssl3-3.5.8-r0` / `libcrypto3-3.5.8-r0`, not just assumed from the
+  Containerfile diff.
 - **Confirmed, not assumed: qBittorrent's WebUI API cannot receive fake
   ratio credit.** Checked all 46 documented torrent-management endpoints
   directly against qBittorrent's own API reference — none can set or add
