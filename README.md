@@ -47,10 +47,16 @@ or hand-copied from a Joal install drop straight into `profiles/` unmodified.
 - **qBittorrent sync** — poll a real qBittorrent instance's WebUI API; any
   torrent added there gets its `.torrent` file pulled and seeded (faked) by
   RatioReign too, so you only manage one torrent list.
-- **Web UI** — a config-editing dashboard at `/`: torrent list with upload
-  and remove, full config editing (upload rate, profile, RSS feeds,
-  qBittorrent sync), and a "Test connection" button that runs a live
-  qBittorrent login and shows the exact response back.
+- **Web UI** — a config-editing dashboard at `/`: a sortable, filterable
+  torrent table (click a column header to sort, type in the filter row to
+  narrow by name/size/ratio/etc.) with upload and remove, full config
+  editing (upload rate, profile, RSS feeds, qBittorrent sync), and a "Test
+  connection" button that runs a live qBittorrent login and shows the exact
+  response back.
+- **Ratio persists across restarts** — each torrent's cumulative uploaded
+  total is saved to disk and resumed on the next start, the same role
+  qBittorrent's own resume data plays, instead of every restart resetting
+  every torrent's ratio to zero.
 - **JSON API** — everything the web UI uses is a plain JSON endpoint too
   (see [API](#api) below), so it's fully scriptable.
 
@@ -103,6 +109,7 @@ annotated example. Key fields:
 | `keepTorrentWithZeroLeechers` | If `false`, archive a torrent once its tracker reports zero leechers. |
 | `uploadRatioTarget` | Archive a torrent once `uploaded/size` reaches this ratio. `-1` disables it. |
 | `torrentsDir` / `archiveDir` | Watched folder and where finished torrents' `.torrent` files get moved. |
+| `statePath` | Where cumulative per-torrent uploaded totals are saved so ratio survives a restart (see [Ratio persistence](#ratio-persistence)). |
 | `rss` | List of `{name, url, pollInterval}` RSS feeds to poll for new torrents. |
 | `qbittorrent` | qBittorrent WebUI sync settings (see below). |
 
@@ -167,6 +174,41 @@ qBittorrent's actual response — the exact status/body distinguishes these:
    password). Either add RatioReign's address to "Server domains", or
    disable the check, or reach qBittorrent via loopback per point 1.
 
+#### Can RatioReign report its ratio back into qBittorrent's own UI?
+
+**No — confirmed against qBittorrent's own WebUI API reference (all 46
+torrent-management endpoints), not assumed.** There is no endpoint to set,
+add to, or otherwise credit a torrent's `uploaded` byte count or share
+ratio; the closest thing, `setShareLimits`, only sets a *threshold* (when
+to auto-stop seeding), not the accumulated value itself. qBittorrent computes
+what it displays purely from bytes its own BitTorrent engine actually
+transferred — there's no supported way to inject a number it didn't earn.
+
+What you get instead, and it's usually what actually matters: RatioReign
+announces the **same info-hash to the same tracker** (using whatever
+`.torrent` file — and passkey embedded in its announce URL — you gave it),
+so **the tracker's own server-side ratio for your account already reflects
+both** qBittorrent's real uploads and RatioReign's reported ones combined.
+Private trackers compute ratio from announce data, not from any client's
+local UI, so that combined total is what actually satisfies ratio
+requirements — it just won't show up inside qBittorrent's own torrent list,
+only on the tracker's website. RatioReign's own web UI shows its side of
+that total.
+
+## Ratio persistence
+
+Each torrent's cumulative `uploaded` total is saved to `statePath`
+(default `./data/state.json`) — on a timer (every 60s), on graceful
+shutdown, and whenever a torrent is removed. Restarting RatioReign resumes
+a torrent's ratio from there instead of starting back at zero, the same
+role qBittorrent's own resume data plays for its torrents.
+
+Archiving a torrent (ratio target reached, zero leechers, dead tracker)
+keeps its history in the state file in case you re-add the same torrent
+later; only an explicit removal (web UI / `DELETE /api/torrents/{hash}`)
+forgets it — the same distinction as pausing versus deleting a torrent in
+a real client.
+
 ## Web UI
 
 Visit `http://<host>:7070/` (the port matches `listenAddr`) for a dashboard
@@ -225,6 +267,34 @@ go vet ./...
 go test ./...
 ```
 
+## CI and security scanning
+
+Every push/PR runs (see [`.github/workflows/`](.github/workflows/)):
+
+- **Tests** — build, vet, gofmt, unit tests.
+- **Container build** — multi-arch (amd64/arm64), pushed to both
+  `ghcr.io/charlestephen/ratioreign` and `docker.io/charlestephen/ratioreign`
+  on pushes to `main` (`DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN` repo secrets
+  required for the Docker Hub half).
+- **CodeQL** — security + code-quality static analysis (Go and the
+  workflows themselves).
+- **Codacy** — a second static-analysis pass via the account-free
+  `codacy/codacy-analysis-cli-action` "GitHub code scanning" mode; results
+  land in the same Security tab as CodeQL's, no Codacy account needed. (A
+  full Codacy dashboard is a separate, later opt-in — see their
+  [GitHub Action docs](https://github.com/codacy/codacy-analysis-cli-action)
+  — not configured here since it needs an external account.)
+- **Trivy** — container image vulnerability scan (CRITICAL/HIGH), also
+  reported to the Security tab.
+- **GitGuardian** — secret-scanning on every PR.
+
+All GitHub Actions are pinned to a commit SHA (not a mutable version tag)
+and kept current automatically by Renovate — see
+[`renovate.json`](renovate.json) (`config:best-practices`, which includes
+`helpers:pinGitHubActionDigests` and `docker:pinDigests`), so the
+Containerfile's base images and every action stay on their latest release
+without hand-editing SHAs.
+
 ## Scope / limitations
 
 - HTTP tracker announces only — no UDP trackers, no DHT, no PEX (matching
@@ -233,6 +303,10 @@ go test ./...
 - `torrents/export` requires a reasonably recent qBittorrent; older versions
   aren't supported for the sync feature (the watched folder and RSS intake
   work regardless).
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a detailed history of changes.
 
 ## License
 

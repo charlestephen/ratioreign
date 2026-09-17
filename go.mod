@@ -1,5 +1,5 @@
 module git.lan.cst.wtf/charlestephen/ratioreign
 
-go 1.23
+go 1.27
 
 require gopkg.in/yaml.v3 v3.0.1

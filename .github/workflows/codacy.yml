@@ -1,0 +1,39 @@
+name: Codacy Security Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  codacy-security-scan:
+    name: Codacy Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Run Codacy Analysis CLI
+        uses: codacy/codacy-analysis-cli-action@d43360362776a6789b47b99ae8973510854e2d3d # master
+        with:
+          output: results.sarif
+          format: sarif
+          gh-code-scanning-compat: true
+          # This job only reports findings (to GitHub's Security tab, via
+          # the upload step below); it never fails the build on its own —
+          # letting GitHub's own code-scanning alert thresholds decide
+          # what's actionable keeps this consistent with the CodeQL job.
+          max-allowed-issues: 2147483647
+
+      - name: Upload SARIF results
+        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4
+        with:
+          sarif_file: results.sarif
