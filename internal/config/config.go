@@ -40,6 +40,11 @@ type Config struct {
 	ArchiveDir  string `yaml:"archiveDir"`
 	ProfilesDir string `yaml:"profilesDir"`
 
+	// StatePath is where each torrent's cumulative uploaded-byte total is
+	// saved, so ratio survives a restart instead of resetting to zero —
+	// the same role qBittorrent's own resume data plays.
+	StatePath string `yaml:"statePath"`
+
 	RSS         []RSSFeed          `yaml:"rss"`
 	QBittorrent *QBittorrentConfig `yaml:"qbittorrent"`
 }
@@ -71,6 +76,7 @@ func defaults() Config {
 		TorrentsDir:                 "./data/torrents",
 		ArchiveDir:                  "./data/torrents/archived",
 		ProfilesDir:                 "./profiles",
+		StatePath:                   "./data/state.json",
 	}
 }
 

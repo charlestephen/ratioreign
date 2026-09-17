@@ -46,6 +46,7 @@ type configView struct {
 	TorrentsDir                 string           `json:"torrentsDir"`
 	ArchiveDir                  string           `json:"archiveDir"`
 	ProfilesDir                 string           `json:"profilesDir"`
+	StatePath                   string           `json:"statePath"`
 	RSS                         []rssFeedView    `json:"rss"`
 	QBittorrent                 *qbittorrentView `json:"qbittorrent"`
 }
@@ -62,6 +63,7 @@ func toConfigView(c *config.Config) configView {
 		TorrentsDir:                 c.TorrentsDir,
 		ArchiveDir:                  c.ArchiveDir,
 		ProfilesDir:                 c.ProfilesDir,
+		StatePath:                   c.StatePath,
 		RSS:                         []rssFeedView{},
 	}
 	for _, f := range c.RSS {
@@ -95,6 +97,7 @@ func fromConfigView(v configView, existing *config.Config) (*config.Config, erro
 		TorrentsDir:                 v.TorrentsDir,
 		ArchiveDir:                  v.ArchiveDir,
 		ProfilesDir:                 v.ProfilesDir,
+		StatePath:                   v.StatePath,
 	}
 	for i, f := range v.RSS {
 		d, err := parseOptionalDuration(f.PollInterval)

@@ -7,11 +7,11 @@
 <style>
   :root {
     color-scheme: light dark;
-    --bg: #f5f5f5; --fg: #1a1a1a; --card: #ffffff; --border: #d8d8d8;
+    --bg: #f5f5f5; --fg: #1a1a1a; --card: #ffffff; --row-alt: #f0f0f0; --border: #d8d8d8;
     --accent: #2563eb; --danger: #dc2626; --ok: #16a34a; --muted: #6b6b6b;
   }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #16181d; --fg: #e8e8e8; --card: #1f232a; --border: #333a44; --muted: #9aa0aa; }
+    :root { --bg: #16181d; --fg: #e8e8e8; --card: #1f232a; --row-alt: #262b33; --border: #333a44; --muted: #9aa0aa; }
   }
   * { box-sizing: border-box; }
   body {
@@ -29,8 +29,18 @@
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
   th { color: var(--muted); font-weight: 600; }
+  tbody tr:nth-child(even) { background: var(--row-alt); }
   tr:last-child td { border-bottom: none; }
   .empty { color: var(--muted); font-style: italic; padding: 8px; }
+  th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+  th.sortable:hover { color: var(--fg); }
+  th.sortable .arrow { display: inline-block; width: 1em; opacity: .5; }
+  th.sortable.sorted .arrow { opacity: 1; }
+  tr.filter-row td, tr.filter-row th { padding: 4px 8px; border-bottom: 1px solid var(--border); }
+  tr.filter-row input {
+    width: 100%; padding: 3px 6px; font-size: 12px; border: 1px solid var(--border);
+    border-radius: 4px; background: var(--bg); color: var(--fg);
+  }
   label { display: block; margin: 10px 0 4px; font-size: 13px; }
   label.inline { display: inline-flex; align-items: center; gap: 6px; margin-right: 16px; }
   input[type=text], input[type=number], input[type=password], input[type=url], select {
@@ -70,10 +80,34 @@
 <div class="card">
   <h2>Torrents</h2>
   <table id="torrents-table">
-    <thead><tr>
-      <th>Name</th><th>Uploaded</th><th>Ratio</th><th>Seeders</th><th>Leechers</th>
-      <th>Active</th><th>Last error</th><th></th>
-    </tr></thead>
+    <thead>
+      <tr>
+        <th class="sortable" data-key="name" data-type="string">Name <span class="arrow"></span></th>
+        <th class="sortable" data-key="uploaded" data-type="number">Uploaded <span class="arrow"></span></th>
+        <th class="sortable" data-key="ratio" data-type="number">Ratio <span class="arrow"></span></th>
+        <th class="sortable" data-key="seeders" data-type="number">Seeders <span class="arrow"></span></th>
+        <th class="sortable" data-key="leechers" data-type="number">Leechers <span class="arrow"></span></th>
+        <th class="sortable" data-key="active" data-type="bool">Active <span class="arrow"></span></th>
+        <th class="sortable" data-key="lastError" data-type="string">Last error <span class="arrow"></span></th>
+        <th></th>
+      </tr>
+      <tr class="filter-row">
+        <th><input type="text" data-filter="name" placeholder="filter…"></th>
+        <th><input type="number" data-filter="uploaded" placeholder="min MB" min="0"></th>
+        <th><input type="number" data-filter="ratio" placeholder="min" min="0" step="0.01"></th>
+        <th><input type="number" data-filter="seeders" placeholder="min" min="0"></th>
+        <th><input type="number" data-filter="leechers" placeholder="min" min="0"></th>
+        <th>
+          <select data-filter="active">
+            <option value="">any</option>
+            <option value="true">active</option>
+            <option value="false">waiting</option>
+          </select>
+        </th>
+        <th><input type="text" data-filter="lastError" placeholder="filter…"></th>
+        <th></th>
+      </tr>
+    </thead>
     <tbody><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
   </table>
 
@@ -135,6 +169,7 @@
         <div><label for="f-torrentsDir">Torrents dir (watched folder)</label><input type="text" id="f-torrentsDir" required></div>
         <div><label for="f-archiveDir">Archive dir</label><input type="text" id="f-archiveDir" required></div>
         <div><label for="f-profilesDir">Profiles dir</label><input type="text" id="f-profilesDir" required></div>
+        <div><label for="f-statePath">Ratio state file</label><input type="text" id="f-statePath" required></div>
       </div>
     </fieldset>
 
@@ -195,16 +230,31 @@ async function api(path, opts) {
 
 // ---- torrents ----
 
+// The API polls every few seconds; keep the raw list separate from what's
+// rendered so re-sorting/re-filtering client-side never needs a round trip,
+// and a poll landing mid-interaction doesn't reset the user's sort/filter.
+let torrentsData = [];
+let sortState = { key: 'name', dir: 'asc' };
+const filters = {};
+const COLUMN_TYPES = { name: 'string', uploaded: 'number', ratio: 'number', seeders: 'number', leechers: 'number', active: 'bool', lastError: 'string' };
+
 async function refreshTorrents() {
-  let torrents;
-  try { torrents = await api('/api/torrents'); }
+  try { torrentsData = await api('/api/torrents'); }
   catch (e) { return; }
+  renderTorrents();
+}
+
+function renderTorrents() {
   const tbody = document.querySelector('#torrents-table tbody');
-  if (!torrents.length) {
-    tbody.innerHTML = '<tr><td colspan="8" class="empty">No torrents yet — upload one below, or enable RSS/qBittorrent intake.</td></tr>';
+  const rows = sortRows(torrentsData.filter(matchesFilters));
+  if (!rows.length) {
+    const msg = torrentsData.length
+      ? 'No torrents match the current filters.'
+      : 'No torrents yet — upload one below, or enable RSS/qBittorrent intake.';
+    tbody.innerHTML = `<tr><td colspan="8" class="empty">${msg}</td></tr>`;
     return;
   }
-  tbody.innerHTML = torrents.map(t => `
+  tbody.innerHTML = rows.map(t => `
     <tr>
       <td>${escapeHtml(t.name)}</td>
       <td>${humanBytes(t.uploaded)}</td>
@@ -224,6 +274,71 @@ async function refreshTorrents() {
     });
   });
 }
+
+function matchesFilters(t) {
+  for (const key in filters) {
+    const val = filters[key];
+    if (val === '' || val == null) continue;
+    switch (key) {
+      case 'name':
+      case 'lastError':
+        if (!(t[key] || '').toLowerCase().includes(val.toLowerCase())) return false;
+        break;
+      case 'uploaded':
+        // The filter input is in MB (bytes would be unusable to type).
+        if (t.uploaded < Number(val) * 1024 * 1024) return false;
+        break;
+      case 'ratio':
+      case 'seeders':
+      case 'leechers':
+        if (t[key] < Number(val)) return false;
+        break;
+      case 'active':
+        if (String(t.active) !== val) return false;
+        break;
+    }
+  }
+  return true;
+}
+
+function sortRows(rows) {
+  const { key, dir } = sortState;
+  const type = COLUMN_TYPES[key];
+  const mul = dir === 'asc' ? 1 : -1;
+  return rows.slice().sort((a, b) => {
+    let av = a[key], bv = b[key];
+    if (type === 'string') { av = (av || '').toLowerCase(); bv = (bv || '').toLowerCase(); }
+    if (type === 'bool') { av = av ? 1 : 0; bv = bv ? 1 : 0; }
+    if (av < bv) return -mul;
+    if (av > bv) return mul;
+    return 0;
+  });
+}
+
+function updateSortIndicators() {
+  document.querySelectorAll('#torrents-table th.sortable').forEach(th => {
+    const active = th.dataset.key === sortState.key;
+    th.classList.toggle('sorted', active);
+    th.querySelector('.arrow').textContent = active ? (sortState.dir === 'asc' ? '▲' : '▼') : '';
+  });
+}
+
+document.querySelectorAll('#torrents-table th.sortable').forEach(th => {
+  th.addEventListener('click', () => {
+    sortState = th.dataset.key === sortState.key
+      ? { key: sortState.key, dir: sortState.dir === 'asc' ? 'desc' : 'asc' }
+      : { key: th.dataset.key, dir: 'asc' };
+    updateSortIndicators();
+    renderTorrents();
+  });
+});
+updateSortIndicators();
+
+document.querySelectorAll('#torrents-table tr.filter-row [data-filter]').forEach(el => {
+  const handler = () => { filters[el.dataset.filter] = el.value; renderTorrents(); };
+  el.addEventListener('input', handler);
+  el.addEventListener('change', handler);
+});
 
 function escapeHtml(s) {
   return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -299,6 +414,7 @@ async function loadConfig() {
   $('f-torrentsDir').value = cfg.torrentsDir;
   $('f-archiveDir').value = cfg.archiveDir;
   $('f-profilesDir').value = cfg.profilesDir;
+  $('f-statePath').value = cfg.statePath;
 
   $('rss-rows').innerHTML = '';
   (cfg.rss || []).forEach(addRssRow);
@@ -331,6 +447,7 @@ function buildConfigPayload() {
     torrentsDir: $('f-torrentsDir').value,
     archiveDir: $('f-archiveDir').value,
     profilesDir: $('f-profilesDir').value,
+    statePath: $('f-statePath').value,
     rss,
     qbittorrent: {
       enabled: $('f-qbt-enabled').checked,
