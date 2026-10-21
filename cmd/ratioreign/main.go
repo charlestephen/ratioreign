@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -23,6 +24,38 @@ import (
 	"git.lan.cst.wtf/charlestephen/ratioreign/internal/watcher"
 )
 
+// detectQBittorrentProfile logs in to qBittorrent, reads its version, and
+// ensures a spoofing profile for that version exists in the generated
+// profiles dir. Returns the profile name ("qbittorrent-X.Y.Z"), or "" when
+// detection failed for any reason — callers fall back to the configured
+// profile, since a temporarily unreachable qBittorrent shouldn't stop
+// ratioreign from starting.
+func detectQBittorrentProfile(cfg *config.Config, client *qbittorrent.Client) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := client.Login(ctx); err != nil {
+		slog.Warn("qbittorrent: version detection login failed, using configured profile", "error", err)
+		return ""
+	}
+	version, err := client.Version(ctx)
+	if err != nil {
+		slog.Warn("qbittorrent: version detection failed, using configured profile", "error", err)
+		return ""
+	}
+	dir := profile.GeneratedProfilesDir(cfg.StatePath)
+	name, created, err := profile.EnsureQBittorrentProfile(dir, version)
+	if err != nil {
+		slog.Warn("qbittorrent: could not prepare profile for detected version", "version", version, "error", err)
+		return ""
+	}
+	if created {
+		slog.Info("qbittorrent: generated client profile for detected version", "profile", name, "dir", dir)
+	} else {
+		slog.Info("qbittorrent: detected version, profile already present", "profile", name)
+	}
+	return name
+}
+
 func main() {
 	configPath := flag.String("config", "./config/config.yaml", "path to config.yaml")
 	flag.Parse()
@@ -33,14 +66,43 @@ func main() {
 		os.Exit(1)
 	}
 
+	// When qBittorrent sync is on, ask the real client its version and make
+	// sure a spoofing profile exists for exactly that version — a static
+	// clientProfile silently goes stale every time qBittorrent upgrades.
+	// Any failure here only logs: a down qBittorrent must not take down
+	// seeding for torrents from the other intake paths.
+	var qbClient *qbittorrent.Client
+	detectedProfile := ""
+	if cfg.QBittorrent != nil && cfg.QBittorrent.Enabled {
+		qbClient, err = qbittorrent.NewClient(cfg.QBittorrent.URL, cfg.QBittorrent.Username, cfg.QBittorrent.Password)
+		if err != nil {
+			slog.Error("failed to create qbittorrent client", "error", err)
+			os.Exit(1)
+		}
+		detectedProfile = detectQBittorrentProfile(cfg, qbClient)
+	}
+
 	profiles, err := profile.LoadDir(cfg.ProfilesDir)
 	if err != nil {
 		slog.Error("failed to load client profiles", "dir", cfg.ProfilesDir, "error", err)
 		os.Exit(1)
 	}
-	activeProfile, ok := profiles[cfg.ClientProfile]
+	if generated, err := profile.LoadDir(profile.GeneratedProfilesDir(cfg.StatePath)); err == nil {
+		for name, p := range generated {
+			profiles[name] = p
+		}
+	}
+
+	// Impersonate the detected qBittorrent version when the configured
+	// profile is a qBittorrent one; an explicitly different client family
+	// (e.g. Transmission) is left alone.
+	activeName := cfg.ClientProfile
+	if detectedProfile != "" && strings.HasPrefix(cfg.ClientProfile, "qbittorrent") {
+		activeName = detectedProfile
+	}
+	activeProfile, ok := profiles[activeName]
 	if !ok {
-		slog.Error("configured clientProfile not found", "clientProfile", cfg.ClientProfile, "profilesDir", cfg.ProfilesDir)
+		slog.Error("configured clientProfile not found", "clientProfile", activeName, "profilesDir", cfg.ProfilesDir)
 		os.Exit(1)
 	}
 	slog.Info("loaded client profile", "profile", activeProfile.Name)
@@ -80,11 +142,6 @@ func main() {
 
 	var qbSync *qbittorrent.Sync
 	if cfg.QBittorrent != nil && cfg.QBittorrent.Enabled {
-		qbClient, err := qbittorrent.NewClient(cfg.QBittorrent.URL, cfg.QBittorrent.Username, cfg.QBittorrent.Password)
-		if err != nil {
-			slog.Error("failed to create qbittorrent client", "error", err)
-			os.Exit(1)
-		}
 		qbSync = qbittorrent.NewSync(qbClient, cfg.TorrentsDir, cfg.QBittorrent.Category, cfg.QBittorrent.PollInterval)
 		if ex := cfg.QBittorrent.Exclude; ex != nil {
 			qbSync.Exclude = qbittorrent.ExcludeRules{

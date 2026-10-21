@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"git.lan.cst.wtf/charlestephen/ratioreign/internal/config"
+	"git.lan.cst.wtf/charlestephen/ratioreign/internal/profile"
 )
 
 // rssFeedView and qbittorrentView mirror config.RSSFeed / QBittorrentConfig
@@ -187,16 +188,31 @@ func (s *Server) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleListProfiles(w http.ResponseWriter, r *http.Request) {
-	entries, err := os.ReadDir(s.Config.ProfilesDir)
-	if err != nil {
+	seen := map[string]bool{}
+	names := []string{}
+	addFrom := func(dir string) error {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return err
+		}
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".client") {
+				continue
+			}
+			name := strings.TrimSuffix(e.Name(), ".client")
+			if !seen[name] {
+				seen[name] = true
+				names = append(names, name)
+			}
+		}
+		return nil
+	}
+	if err := addFrom(s.Config.ProfilesDir); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	names := []string{}
-	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".client") {
-			names = append(names, strings.TrimSuffix(e.Name(), ".client"))
-		}
-	}
+	// Auto-generated profiles (for the detected qBittorrent version) live
+	// next to the state file; that dir may not exist yet — not an error.
+	_ = addFrom(profile.GeneratedProfilesDir(s.Config.StatePath))
 	writeJSON(w, http.StatusOK, names)
 }

@@ -178,6 +178,35 @@ func (c *Client) ListTrackers(ctx context.Context, hash string) ([]TrackerEntry,
 	return trackers, nil
 }
 
+// Version returns the qBittorrent version reported by /api/v2/app/version,
+// normalized to bare "X.Y.Z" (the API returns values like "v5.1.2").
+func (c *Client) Version(ctx context.Context) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v2/app/version", nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if isAuthFailure(resp.StatusCode) {
+		return "", errNotAuthenticated
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("qbittorrent: app/version returned HTTP %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<8))
+	if err != nil {
+		return "", err
+	}
+	v := strings.TrimPrefix(strings.TrimSpace(string(body)), "v")
+	if v == "" {
+		return "", fmt.Errorf("qbittorrent: app/version returned an empty version")
+	}
+	return v, nil
+}
+
 // ExportTorrent downloads the raw .torrent file for hash, using the
 // torrents/export endpoint (qBittorrent >= 4.5 / WebAPI >= 2.8.19).
 func (c *Client) ExportTorrent(ctx context.Context, hash string) ([]byte, error) {
