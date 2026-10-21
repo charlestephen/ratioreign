@@ -69,5 +69,6 @@ func (s *Server) handleQBittorrentStatus(w http.ResponseWriter, r *http.Request)
 		"lastPollAt":      status.LastPollAt,
 		"lastError":       status.LastError,
 		"torrentsTracked": status.Tracked,
+		"excluded":        status.Excluded,
 	})
 }

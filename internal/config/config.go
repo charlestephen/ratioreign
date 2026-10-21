@@ -63,6 +63,23 @@ type QBittorrentConfig struct {
 	PollInterval time.Duration `yaml:"pollInterval"`
 	// Category, if set, only imports qBittorrent torrents in this category.
 	Category string `yaml:"category"`
+	// Exclude, if set, keeps torrents matching its rules out of ratioreign.
+	Exclude *QBittorrentExclude `yaml:"exclude"`
+}
+
+// QBittorrentExclude mirrors qbittorrent.ExcludeRules for YAML, plus the
+// eviction toggle. Seeder/leecher thresholds use qBittorrent's swarm counts
+// (num_complete/num_incomplete from the tracker scrape). Zero disables each
+// numeric check.
+type QBittorrentExclude struct {
+	Trackers    []string `yaml:"trackers"`
+	Tags        []string `yaml:"tags"`
+	MaxSeeders  int      `yaml:"maxSeeders"`
+	MinLeechers int      `yaml:"minLeechers"`
+	// Evict applies the rules to torrents already imported too, stopping
+	// their fake seed and removing the exported .torrent file. When false,
+	// rules only gate new imports.
+	Evict bool `yaml:"evict"`
 }
 
 func defaults() Config {
@@ -148,6 +165,14 @@ func (c *Config) Validate() error {
 		}
 		if c.QBittorrent.PollInterval <= 0 {
 			c.QBittorrent.PollInterval = 30 * time.Second
+		}
+		if ex := c.QBittorrent.Exclude; ex != nil {
+			if ex.MaxSeeders < 0 {
+				return fmt.Errorf("qbittorrent.exclude.maxSeeders must be >= 0")
+			}
+			if ex.MinLeechers < 0 {
+				return fmt.Errorf("qbittorrent.exclude.minLeechers must be >= 0")
+			}
 		}
 	}
 	return nil

@@ -122,7 +122,35 @@ qbittorrent:
   password: your-password
   pollInterval: 30s
   # category: ratioreign   # optional: only sync this category
+  # exclude:               # optional: keep matching torrents out
+  #   trackers: ["tracker.example.org"]
+  #   tags: ["donotseed"]
+  #   maxSeeders: 500
+  #   minLeechers: 2
+  #   evict: false
 ```
+
+#### Excluding torrents from sync
+
+An optional `qbittorrent.exclude` block keeps torrents out of RatioReign:
+
+- `trackers` — excluded when any of the torrent's tracker hosts contains
+  any listed substring (case-insensitive; all trackers from
+  `torrents/trackers` are checked, not just the active one).
+- `tags` — excluded when the torrent carries any listed tag (exact match).
+- `maxSeeders` / `minLeechers` — excluded when the swarm seeder count
+  exceeds / the swarm leecher count falls below the threshold. These use
+  qBittorrent's tracker-scrape swarm numbers (`num_complete` /
+  `num_incomplete`), not the usually-zero connected-peer counts. `0`
+  disables each check.
+- `evict` (default `false`) — also apply the rules to torrents already
+  imported: their fake seed is stopped and the exported `.torrent` file
+  is removed. Without it, rules only gate new imports.
+
+Excluded torrents are never marked as seen — swarm counts change, so a
+torrent skipped now is imported on a later poll if it stops matching.
+`GET /api/qbittorrent/status` reports every currently-excluded torrent
+with the rule that fired, and the web UI shows the same list.
 
 RatioReign logs into qBittorrent's WebUI API, polls `torrents/info`, and for
 every torrent it hasn't seen exports the `.torrent` file (`torrents/export`
@@ -249,11 +277,18 @@ for a complete example. Fields:
 
 ```bash
 git clone https://github.com/charlestephen/ratioreign.git && cd ratioreign
+# The web UI is a Vue SPA in webui/; its production build is committed
+# under internal/api/webui/dist and embedded in the binary. Rebuild it
+# after frontend changes:
+(cd webui && npm ci && npm run build)
 go build -o ratioreign ./cmd/ratioreign
 cp config/config.example.yaml config/config.yaml
 # edit config/config.yaml: at minimum pick a clientProfile
 ./ratioreign -config config/config.yaml
 ```
+
+For frontend development, `npm run dev` in `webui/` serves the SPA with
+hot reload and proxies `/api` to a locally running daemon on `:7070`.
 
 ```bash
 go build ./...

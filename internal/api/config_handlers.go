@@ -29,10 +29,19 @@ type qbittorrentView struct {
 	// secret to the browser. On PUT, a blank Password means "leave it
 	// unchanged"; there's no way to explicitly clear it, but disabling
 	// qBittorrent sync entirely covers that case.
-	Password     string `json:"password"`
-	PasswordSet  bool   `json:"passwordSet"`
-	PollInterval string `json:"pollInterval"`
-	Category     string `json:"category"`
+	Password     string                  `json:"password"`
+	PasswordSet  bool                    `json:"passwordSet"`
+	PollInterval string                  `json:"pollInterval"`
+	Category     string                  `json:"category"`
+	Exclude      *qbittorrentExcludeView `json:"exclude,omitempty"`
+}
+
+type qbittorrentExcludeView struct {
+	Trackers    []string `json:"trackers"`
+	Tags        []string `json:"tags"`
+	MaxSeeders  int      `json:"maxSeeders"`
+	MinLeechers int      `json:"minLeechers"`
+	Evict       bool     `json:"evict"`
 }
 
 type configView struct {
@@ -78,6 +87,15 @@ func toConfigView(c *config.Config) configView {
 			PollInterval: c.QBittorrent.PollInterval.String(),
 			Category:     c.QBittorrent.Category,
 		}
+		if ex := c.QBittorrent.Exclude; ex != nil {
+			v.QBittorrent.Exclude = &qbittorrentExcludeView{
+				Trackers:    ex.Trackers,
+				Tags:        ex.Tags,
+				MaxSeeders:  ex.MaxSeeders,
+				MinLeechers: ex.MinLeechers,
+				Evict:       ex.Evict,
+			}
+		}
 	}
 	return v
 }
@@ -122,6 +140,15 @@ func fromConfigView(v configView, existing *config.Config) (*config.Config, erro
 			Password:     password,
 			PollInterval: d,
 			Category:     v.QBittorrent.Category,
+		}
+		if ex := v.QBittorrent.Exclude; ex != nil {
+			c.QBittorrent.Exclude = &config.QBittorrentExclude{
+				Trackers:    ex.Trackers,
+				Tags:        ex.Tags,
+				MaxSeeders:  ex.MaxSeeders,
+				MinLeechers: ex.MinLeechers,
+				Evict:       ex.Evict,
+			}
 		}
 	}
 	return c, nil
