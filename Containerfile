@@ -1,4 +1,4 @@
-FROM node:26-alpine AS webui
+FROM node:26-alpine@sha256:6f08a523443ddedf52941874c203475b0ad503e859ad70cb26ab8be9a517dbd5 AS webui
 WORKDIR /webui
 COPY webui/package.json webui/package-lock.json ./
 RUN npm ci
