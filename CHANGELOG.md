@@ -4,6 +4,25 @@ All notable changes to RatioReign are documented in this file, starting
 from this entry onward. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.1.0] - 2026-10-20
+
+### Added
+
+- **Auto-generated client profile for your qBittorrent version.** With
+  qBittorrent sync enabled, startup now logs in, reads the real client's
+  version from `app/version`, and makes sure a `qbittorrent-X.Y.Z`
+  spoofing profile exists for it — generating one from the bundled
+  qBittorrent template when missing (across versions only the peer-id
+  version digits and the User-Agent change; both are derived from the
+  detected version). When `clientProfile` names a `qbittorrent-*`
+  profile, the detected version's profile is the one impersonated, so
+  the fingerprint no longer goes stale on qBittorrent upgrades.
+  Generated profiles land in a `profiles/` dir next to `statePath` (the
+  writable data volume) and never overwrite an existing file; detection
+  failures fall back to the configured profile.
+  (`internal/profile/generate.go`, `internal/qbittorrent/qbittorrent.go`,
+  `cmd/ratioreign/main.go`)
+
 ## [2.0.0] - 2026-10-20
 
 ### Added
