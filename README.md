@@ -155,6 +155,19 @@ with the rule that fired, and the web UI shows the same list.
 RatioReign logs into qBittorrent's WebUI API, polls `torrents/info`, and for
 every torrent it hasn't seen exports the `.torrent` file (`torrents/export`
 — **requires qBittorrent >= 4.5** / WebAPI >= 2.8.19) into `torrentsDir`.
+
+On startup it also queries the client's version (`app/version`). When the
+configured `clientProfile` is a `qbittorrent-*` profile, RatioReign
+impersonates exactly that detected version: a profile for it is loaded
+from `profilesDir` (or the generated-profiles dir below) if present, and
+otherwise auto-generated from the bundled qBittorrent template — across
+versions only the peer-id version digits and User-Agent change. Generated
+profiles are written to a `profiles/` directory next to `statePath` (the
+writable data volume; `profilesDir` in the container image is read-only)
+and never overwrite an existing file, so a hand-tuned community profile
+for the same version always wins. Detection failures (qBittorrent down at
+startup) just fall back to the configured profile. Configuring a
+non-qBittorrent profile (e.g. Transmission) disables the override.
 From there it's seeded (faked) exactly like any manually-added torrent —
 qBittorrent itself is left completely alone; RatioReign only reads from it.
 
@@ -313,10 +326,11 @@ podman run -d --replace --name ratioreign --user 1000:1000 \
 Every push/PR runs (see [`.github/workflows/`](.github/workflows/)):
 
 - **Tests** — build, vet, gofmt, unit tests.
-- **Container build** — multi-arch (amd64/arm64), pushed to both
-  `ghcr.io/charlestephen/ratioreign` and `docker.io/charlestephen/ratioreign`
-  on pushes to `main` (`DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN` repo secrets
-  required for the Docker Hub half).
+- **Container build** — multi-arch (amd64/arm64) image pushed to
+  `ghcr.io/charlestephen/ratioreign` on pushes to `main`; a separate
+  **Publish to Docker Hub** workflow then mirrors each tag to
+  `docker.io/charlestephen/ratioreign` (repo secrets `dockerhub_username` /
+  `dockerhub_password`).
 - **CodeQL** — security + code-quality static analysis (Go and the
   workflows themselves).
 - **golangci-lint** — a second static-analysis pass, this one Go-specific:
