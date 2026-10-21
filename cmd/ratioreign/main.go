@@ -86,6 +86,17 @@ func main() {
 			os.Exit(1)
 		}
 		qbSync = qbittorrent.NewSync(qbClient, cfg.TorrentsDir, cfg.QBittorrent.Category, cfg.QBittorrent.PollInterval)
+		if ex := cfg.QBittorrent.Exclude; ex != nil {
+			qbSync.Exclude = qbittorrent.ExcludeRules{
+				Trackers:    ex.Trackers,
+				Tags:        ex.Tags,
+				MaxSeeders:  ex.MaxSeeders,
+				MinLeechers: ex.MinLeechers,
+			}
+			qbSync.Evict = ex.Evict
+			qbSync.EvictFn = mgr.Remove
+			slog.Info("qbittorrent sync exclusions enabled", "evict", ex.Evict)
+		}
 		go qbSync.Run(stop)
 		slog.Info("qbittorrent sync enabled", "url", cfg.QBittorrent.URL)
 	}

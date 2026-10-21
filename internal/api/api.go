@@ -41,7 +41,7 @@ func New(d Deps) http.Handler {
 	s := &Server{Deps: d}
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /{$}", s.handleIndex)
+	registerUI(mux)
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 
 	mux.HandleFunc("GET /api/torrents", s.handleListTorrents)

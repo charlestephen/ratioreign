@@ -104,6 +104,16 @@ type TorrentInfo struct {
 	Hash     string `json:"hash"`
 	Name     string `json:"name"`
 	Category string `json:"category"`
+	// Tracker is the URL of the torrent's currently-active tracker.
+	Tracker string `json:"tracker"`
+	// Tags is qBittorrent's comma-separated tag list ("" when untagged).
+	Tags string `json:"tags"`
+	// NumComplete/NumIncomplete are the swarm-wide seeder/leecher counts
+	// from the tracker's scrape — the "actual" swarm size, as opposed to
+	// NumSeeds/NumLeechs (peers this client is connected to right now,
+	// frequently zero for an idle torrent).
+	NumComplete   int `json:"num_complete"`
+	NumIncomplete int `json:"num_incomplete"`
 }
 
 // ListTorrents returns every torrent qBittorrent knows about, optionally
@@ -133,6 +143,39 @@ func (c *Client) ListTorrents(ctx context.Context, category string) ([]TorrentIn
 		return nil, err
 	}
 	return torrents, nil
+}
+
+// TrackerEntry is one row of qBittorrent's torrents/trackers response.
+type TrackerEntry struct {
+	URL string `json:"url"`
+}
+
+// ListTrackers returns every tracker URL registered for a torrent
+// (torrents/info only reports the currently-active one). Tier-0 entries
+// ("[DHT]", "[PeX]", "[LSD]") are included; callers matching real tracker
+// hosts should ignore entries that don't parse as URLs.
+func (c *Client) ListTrackers(ctx context.Context, hash string) ([]TrackerEntry, error) {
+	u := c.baseURL + "/api/v2/torrents/trackers?hash=" + url.QueryEscape(hash)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if isAuthFailure(resp.StatusCode) {
+		return nil, errNotAuthenticated
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("qbittorrent: torrents/trackers returned HTTP %d", resp.StatusCode)
+	}
+	var trackers []TrackerEntry
+	if err := decodeJSON(resp.Body, &trackers); err != nil {
+		return nil, err
+	}
+	return trackers, nil
 }
 
 // ExportTorrent downloads the raw .torrent file for hash, using the

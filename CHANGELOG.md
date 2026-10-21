@@ -4,6 +4,29 @@ All notable changes to RatioReign are documented in this file, starting
 from this entry onward. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+
+- **qBittorrent sync exclusions.** An optional `qbittorrent.exclude` block
+  keeps torrents out of RatioReign by tracker host (substring, checked
+  against all of the torrent's trackers), by tag, or by swarm size
+  (`maxSeeders` / `minLeechers`, using qBittorrent's tracker-scrape
+  `num_complete` / `num_incomplete`). `evict: true` also stops torrents
+  that were imported before they matched. Excluded torrents are
+  re-checked every poll — they're never marked seen — and
+  `GET /api/qbittorrent/status` reports each one with the rule that
+  fired. (`internal/qbittorrent/exclude.go`, `internal/qbittorrent/sync.go`)
+
+### Changed
+
+- **Web UI rewritten as a Vue 3 + Vite + TypeScript SPA** (`webui/`,
+  built to `internal/api/webui/dist` and embedded in the binary),
+  replacing the single hand-written `index.html`. Same JSON API, same
+  features — plus a sync-exclusions panel in the qBittorrent status card
+  and form fields for the exclusion rules above. The Containerfile
+  builds the SPA in a Node stage before the Go build.
+
 ## [1.0.1] - 2026-09-17
 
 ### Added
