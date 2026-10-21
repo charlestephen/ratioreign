@@ -12,6 +12,9 @@ maxUploadRateKBs: 160
 simultaneousSeed: 20
 
 # Name of a *.client file in profilesDir (without extension) to impersonate.
+# When qBittorrent sync is enabled and this names a qbittorrent-* profile,
+# startup detects the real client's version and impersonates that instead
+# (auto-generating the profile if needed) — see README.
 clientProfile: qbittorrent-4.6.3
 
 # If false, a torrent is archived once its tracker reports zero leechers
