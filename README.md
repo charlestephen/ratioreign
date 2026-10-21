@@ -313,10 +313,11 @@ podman run -d --replace --name ratioreign --user 1000:1000 \
 Every push/PR runs (see [`.github/workflows/`](.github/workflows/)):
 
 - **Tests** — build, vet, gofmt, unit tests.
-- **Container build** — multi-arch (amd64/arm64), pushed to both
-  `ghcr.io/charlestephen/ratioreign` and `docker.io/charlestephen/ratioreign`
-  on pushes to `main` (`DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN` repo secrets
-  required for the Docker Hub half).
+- **Container build** — multi-arch (amd64/arm64) image pushed to
+  `ghcr.io/charlestephen/ratioreign` on pushes to `main`; a separate
+  **Publish to Docker Hub** workflow then mirrors each tag to
+  `docker.io/charlestephen/ratioreign` (repo secrets `dockerhub_username` /
+  `dockerhub_password`).
 - **CodeQL** — security + code-quality static analysis (Go and the
   workflows themselves).
 - **golangci-lint** — a second static-analysis pass, this one Go-specific:
