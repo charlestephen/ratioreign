@@ -6,7 +6,7 @@ COPY webui/ ./
 # Vite writes to ../internal/api/webui/dist, i.e. /internal/api/webui/dist here.
 RUN npm run build
 
-FROM golang:1.27-alpine@sha256:8a5910f31396cd4d89662f56c68b3ae31d374308270a1c3bd96672ee5ed43414 AS build
+FROM golang:1.27-alpine@sha256:f2c872bcee949b7be9c490efd02b48a8a2fbf947cdf533f1c58525ec9d8170fd AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
