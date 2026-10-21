@@ -46,3 +46,14 @@ qbittorrent:
   password: CHANGE_ME
   pollInterval: 30s
   # category: ratioreign   # optional: only sync torrents in this category
+  # Optional: keep torrents matching any rule out of ratioreign. Seeder /
+  # leecher counts are the tracker's swarm numbers (qBittorrent's
+  # num_complete / num_incomplete). Excluded torrents are re-checked every
+  # poll, so one becomes eligible as its swarm changes.
+  # exclude:
+  #   trackers: ["tracker.example.org"]  # host substring, all trackers checked
+  #   tags: ["donotseed"]                # exact tag match
+  #   maxSeeders: 500                    # exclude above this many swarm seeders
+  #   minLeechers: 2                     # exclude below this many swarm leechers
+  #   evict: false                       # true: also stop torrents already
+  #                                      # imported once they match a rule
