@@ -2,6 +2,8 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"time"
@@ -12,6 +14,11 @@ import (
 type Config struct {
 	// ListenAddr is the address the status/control REST API binds to.
 	ListenAddr string `yaml:"listenAddr"`
+
+	// Auth protects the web UI and JSON API with HTTP Basic Auth.
+	// Enabled by default — leave password empty on first start and
+	// EnsureAuthCredentials will generate one and persist it.
+	Auth AuthConfig `yaml:"auth"`
 
 	// MinUploadRateKBs/MaxUploadRateKBs bound the fake aggregate upload
 	// speed (kB/s) reported across all currently-seeding torrents.
@@ -47,6 +54,14 @@ type Config struct {
 
 	RSS         []RSSFeed          `yaml:"rss"`
 	QBittorrent *QBittorrentConfig `yaml:"qbittorrent"`
+}
+
+// AuthConfig is HTTP Basic Auth for the web UI and /api/* routes.
+// /healthz stays open so container healthchecks keep working.
+type AuthConfig struct {
+	Enabled  bool   `yaml:"enabled"`
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
 }
 
 type RSSFeed struct {
@@ -85,6 +100,7 @@ type QBittorrentExclude struct {
 func defaults() Config {
 	return Config{
 		ListenAddr:                  ":7070",
+		Auth:                        AuthConfig{Enabled: true, Username: "admin"},
 		MinUploadRateKBs:            30,
 		MaxUploadRateKBs:            160,
 		SimultaneousSeed:            20,
@@ -97,21 +113,46 @@ func defaults() Config {
 	}
 }
 
+// EnsureAuthCredentials fills a missing Basic Auth password when auth is
+// enabled. Returns (true, password) when a new password was generated so
+// the caller can persist the config and log the one-time secret.
+func (c *Config) EnsureAuthCredentials() (generated bool, password string, err error) {
+	if c.Auth.Username == "" {
+		c.Auth.Username = "admin"
+	}
+	if !c.Auth.Enabled || c.Auth.Password != "" {
+		return false, "", nil
+	}
+	buf := make([]byte, 18)
+	if _, err := rand.Read(buf); err != nil {
+		return false, "", fmt.Errorf("auth: generate password: %w", err)
+	}
+	password = base64.RawURLEncoding.EncodeToString(buf)
+	c.Auth.Password = password
+	return true, password, nil
+}
+
 // Load reads and validates the config file at path, filling in defaults for
-// unset fields.
-func Load(path string) (*Config, error) {
-	cfg := defaults()
+// unset fields. When auth is enabled and no password is set, a random
+// password is generated (authGenerated=true); callers should Save the
+// config and surface the password once.
+func Load(path string) (cfg *Config, authGenerated bool, err error) {
+	c := defaults()
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("config: %w", err)
+		return nil, false, fmt.Errorf("config: %w", err)
 	}
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("config: %s: %w", path, err)
+	if err := yaml.Unmarshal(data, &c); err != nil {
+		return nil, false, fmt.Errorf("config: %s: %w", path, err)
 	}
-	if err := cfg.Validate(); err != nil {
-		return nil, fmt.Errorf("config: %s: %w", path, err)
+	generated, _, err := c.EnsureAuthCredentials()
+	if err != nil {
+		return nil, false, fmt.Errorf("config: %s: %w", path, err)
 	}
-	return &cfg, nil
+	if err := c.Validate(); err != nil {
+		return nil, false, fmt.Errorf("config: %s: %w", path, err)
+	}
+	return &c, generated, nil
 }
 
 // Save validates c and writes it to path as YAML. The write goes through a
@@ -139,6 +180,14 @@ func (c *Config) Save(path string) error {
 // this automatically; the web UI's config-save handler calls it again on a
 // submitted config before writing it to disk.
 func (c *Config) Validate() error {
+	if c.Auth.Enabled {
+		if c.Auth.Username == "" {
+			return fmt.Errorf("auth.username is required when auth.enabled is true")
+		}
+		if c.Auth.Password == "" {
+			return fmt.Errorf("auth.password is required when auth.enabled is true (leave it blank once to auto-generate on start)")
+		}
+	}
 	if c.MinUploadRateKBs < 0 {
 		return fmt.Errorf("minUploadRateKBs must be >= 0")
 	}

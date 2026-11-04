@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.png" alt="RatioReign" width="160" />
+</p>
+
 # RatioReign
 
 A headless BitTorrent ratio-farming daemon written in Go. It announces to
@@ -74,13 +78,35 @@ podman run -d --replace --name ratioreign --user 1000:1000 \
   ghcr.io/charlestephen/ratioreign:latest
 ```
 
-Open `http://localhost:7070/` for the web UI, or drop a `.torrent` file into
+Open `http://localhost:7070/` for the web UI (browser will prompt for Basic
+Auth — see [Authentication](#authentication)), or drop a `.torrent` file into
 `data/torrents/` (or configure RSS/qBittorrent sync below) and watch it show
 up:
 
 ```bash
-curl -s localhost:7070/api/torrents | jq
+curl -s -u admin:"$RATIOREIGN_PASSWORD" localhost:7070/api/torrents | jq
 ```
+
+## Authentication
+
+HTTP Basic Auth is **on by default**. On first start with an empty
+`auth.password`, RatioReign generates a random password, saves it into your
+`config.yaml`, and prints it once at WARN level:
+
+```text
+auth enabled with auto-generated password — change it in the web UI username=admin password=…
+```
+
+| Field | Default | Meaning |
+|---|---|---|
+| `auth.enabled` | `true` | Protect web UI + `/api/*`. |
+| `auth.username` | `admin` | Basic Auth username. |
+| `auth.password` | *(generated)* | Required when enabled; blank on first boot → auto-generate. |
+
+`/healthz` stays unauthenticated so container healthchecks keep working.
+Turn auth off only when the listen address is otherwise unreachable
+(`auth.enabled: false`). Change the password from the web UI Configuration
+panel (leave the password field blank to keep the current value).
 
 ## Configuration
 
@@ -89,6 +115,7 @@ annotated example. Key fields:
 
 | Field | Meaning |
 |---|---|
+| `auth` | HTTP Basic Auth for UI/API (see [Authentication](#authentication)). |
 | `minUploadRateKBs` / `maxUploadRateKBs` | Bounds (kB/s) for the simulated aggregate upload speed, re-rolled every 20 minutes and split across active torrents by leecher demand. |
 | `simultaneousSeed` | Max torrents announcing "seeding" at once; extras wait in a queue. |
 | `clientProfile` | Name (no extension) of a `*.client` file in `profilesDir` to impersonate. |
@@ -277,6 +304,7 @@ for a complete example. Fields:
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/healthz` | Liveness check. |
+| `GET` | `/healthz` | Liveness probe (`ok`); **not** behind Basic Auth. |
 | `GET` | `/api/torrents` | JSON array of every known torrent's status (uploaded bytes, seeders/leechers, ratio, last error). |
 | `POST` | `/api/torrents` | Upload a `.torrent` file (multipart form field `torrent`); seeds it immediately. |
 | `DELETE` | `/api/torrents/{hash}` | Stop seeding a torrent immediately (sends a `stopped` announce). |

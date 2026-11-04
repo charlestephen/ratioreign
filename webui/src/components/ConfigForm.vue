@@ -52,7 +52,8 @@ async function waitForRestart() {
   await new Promise((r) => setTimeout(r, 1500));
   for (let i = 0; i < 30; i++) {
     try {
-      const resp = await fetch('/healthz');
+      // /healthz is intentionally unauthenticated.
+      const resp = await fetch('/healthz', { credentials: 'same-origin' });
       if (resp.ok) return;
     } catch { /* process is down for restart */ }
     await new Promise((r) => setTimeout(r, 1000));
@@ -101,6 +102,31 @@ onMounted(load);
           </select>
         </div>
       </div>
+
+      <fieldset v-if="cfg.auth">
+        <legend>HTTP Basic Auth</legend>
+        <p class="hint">
+          Protects the web UI and JSON API. Leave the password blank to keep the current one.
+          <code>/healthz</code> stays open for healthchecks.
+        </p>
+        <label class="inline"><input v-model="cfg.auth.enabled" type="checkbox"> Enabled</label>
+        <div class="row">
+          <div>
+            <label>Username</label>
+            <input v-model="cfg.auth.username" type="text" :required="cfg.auth.enabled">
+          </div>
+          <div>
+            <label>Password</label>
+            <input
+              v-model="cfg.auth.password"
+              type="password"
+              :placeholder="cfg.auth.passwordSet ? '(unchanged — leave blank to keep)' : ''"
+              autocomplete="new-password"
+            >
+          </div>
+        </div>
+        <p v-if="cfg.auth.passwordSet" class="hint">A password is currently saved; leave blank to keep it.</p>
+      </fieldset>
 
       <div class="row">
         <div>

@@ -55,7 +55,11 @@ func New(d Deps) http.Handler {
 	mux.HandleFunc("GET /api/qbittorrent/status", s.handleQBittorrentStatus)
 	mux.HandleFunc("POST /api/qbittorrent/test", s.handleTestQBittorrent)
 
-	return mux
+	var h http.Handler = mux
+	if d.Config != nil && d.Config.Auth.Enabled {
+		h = basicAuth(d.Config.Auth.Username, d.Config.Auth.Password, mux)
+	}
+	return h
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {

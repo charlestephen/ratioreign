@@ -45,8 +45,18 @@ type qbittorrentExcludeView struct {
 	Evict       bool     `json:"evict"`
 }
 
+type authView struct {
+	Enabled  bool   `json:"enabled"`
+	Username string `json:"username"`
+	// Password is never populated on GET — only PasswordSet is.
+	// On PUT, a blank Password means "leave it unchanged".
+	Password    string `json:"password"`
+	PasswordSet bool   `json:"passwordSet"`
+}
+
 type configView struct {
 	ListenAddr                  string           `json:"listenAddr"`
+	Auth                        authView         `json:"auth"`
 	MinUploadRateKBs            int              `json:"minUploadRateKBs"`
 	MaxUploadRateKBs            int              `json:"maxUploadRateKBs"`
 	SimultaneousSeed            int              `json:"simultaneousSeed"`
@@ -63,7 +73,12 @@ type configView struct {
 
 func toConfigView(c *config.Config) configView {
 	v := configView{
-		ListenAddr:                  c.ListenAddr,
+		ListenAddr: c.ListenAddr,
+		Auth: authView{
+			Enabled:     c.Auth.Enabled,
+			Username:    c.Auth.Username,
+			PasswordSet: c.Auth.Password != "",
+		},
 		MinUploadRateKBs:            c.MinUploadRateKBs,
 		MaxUploadRateKBs:            c.MaxUploadRateKBs,
 		SimultaneousSeed:            c.SimultaneousSeed,
@@ -105,8 +120,17 @@ func toConfigView(c *config.Config) configView {
 // (the config currently running) supplies the qBittorrent password when the
 // view leaves it blank.
 func fromConfigView(v configView, existing *config.Config) (*config.Config, error) {
+	authPassword := v.Auth.Password
+	if authPassword == "" && existing != nil {
+		authPassword = existing.Auth.Password
+	}
 	c := &config.Config{
-		ListenAddr:                  v.ListenAddr,
+		ListenAddr: v.ListenAddr,
+		Auth: config.AuthConfig{
+			Enabled:  v.Auth.Enabled,
+			Username: v.Auth.Username,
+			Password: authPassword,
+		},
 		MinUploadRateKBs:            v.MinUploadRateKBs,
 		MaxUploadRateKBs:            v.MaxUploadRateKBs,
 		SimultaneousSeed:            v.SimultaneousSeed,

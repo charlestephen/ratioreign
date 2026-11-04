@@ -49,8 +49,16 @@ export interface QbConfig {
   exclude?: QbExclude;
 }
 
+export interface AuthConfig {
+  enabled: boolean;
+  username: string;
+  password: string;
+  passwordSet: boolean;
+}
+
 export interface Config {
   listenAddr: string;
+  auth: AuthConfig;
   minUploadRateKBs: number;
   maxUploadRateKBs: number;
   simultaneousSeed: number;
