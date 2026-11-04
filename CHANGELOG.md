@@ -4,6 +4,22 @@ All notable changes to RatioReign are documented in this file, starting
 from this entry onward. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.2.0] - 2026-11-04
+
+### Added
+
+- **HTTP Basic Auth enabled by default** for the web UI and JSON API.
+  Configure under `auth:` (`enabled`, `username`, `password`). If auth is
+  on and `password` is empty at startup, RatioReign generates a random
+  password, writes it into `config.yaml`, and logs it once. `/healthz`
+  stays open for healthchecks. Disable with `auth.enabled: false` only
+  if you intentionally want the UI open on the network.
+  (`internal/config`, `internal/api/auth.go`, web UI Configuration panel)
+
+### Changed
+
+- Official app logo (`logo.png`) and README branding.
+
 ## [2.1.0] - 2026-10-20
 
 ### Added

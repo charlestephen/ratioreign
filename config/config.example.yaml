@@ -2,6 +2,14 @@
 
 listenAddr: ":7070"
 
+# HTTP Basic Auth for the web UI and /api/* (enabled by default).
+# Leave password empty on first start — RatioReign generates one, writes it
+# here, and logs it once. /healthz stays open for probes.
+auth:
+  enabled: true
+  username: admin
+  password: ""
+
 # Aggregate fake upload speed, in kB/s, distributed across active torrents
 # by (simulated) leecher demand.
 minUploadRateKBs: 30

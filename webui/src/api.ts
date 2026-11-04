@@ -1,5 +1,5 @@
 export async function api<T>(path: string, opts?: RequestInit): Promise<T> {
-  const resp = await fetch(path, opts);
+  const resp = await fetch(path, { credentials: 'same-origin', ...opts });
   const text = await resp.text();
   let body: unknown;
   try {

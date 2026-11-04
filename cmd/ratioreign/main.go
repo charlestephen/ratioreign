@@ -60,10 +60,24 @@ func main() {
 	configPath := flag.String("config", "./config/config.yaml", "path to config.yaml")
 	flag.Parse()
 
-	cfg, err := config.Load(*configPath)
+	cfg, authGenerated, err := config.Load(*configPath)
 	if err != nil {
 		slog.Error("failed to load config", "error", err)
 		os.Exit(1)
+	}
+	if authGenerated {
+		if err := cfg.Save(*configPath); err != nil {
+			slog.Error("failed to persist generated auth password", "error", err)
+			os.Exit(1)
+		}
+		slog.Warn("auth enabled with auto-generated password — change it in the web UI",
+			"username", cfg.Auth.Username,
+			"password", cfg.Auth.Password,
+		)
+	} else if cfg.Auth.Enabled {
+		slog.Info("auth enabled", "username", cfg.Auth.Username)
+	} else {
+		slog.Warn("auth disabled — web UI and API are open to the network")
 	}
 
 	// When qBittorrent sync is on, ask the real client its version and make
@@ -179,7 +193,7 @@ func main() {
 		RequestRestart:  requestRestart,
 	})}
 	go func() {
-		slog.Info("api listening", "addr", cfg.ListenAddr)
+		slog.Info("api listening", "addr", cfg.ListenAddr, "auth", cfg.Auth.Enabled)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("api server failed", "error", err)
 		}
