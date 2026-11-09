@@ -4,3 +4,8 @@
 /ratioreign
 *.log
 .DS_Store
+
+# Local tooling and OS files
+.gitignore
+.gitguardian*
+.claude
