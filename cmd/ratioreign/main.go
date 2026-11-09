@@ -56,6 +56,23 @@ func detectQBittorrentProfile(cfg *config.Config, client *qbittorrent.Client) st
 	return name
 }
 
+// logAuthStatus reports the authentication state at startup. It must never
+// log the password: an auto-generated one is saved in the config file, so
+// the log only says where to read it.
+func logAuthStatus(logger *slog.Logger, cfg *config.Config, configPath string, generated bool) {
+	switch {
+	case generated:
+		logger.Warn("auth enabled with an auto-generated password; read auth.password from the config file, then change it in the web UI",
+			"username", cfg.Auth.Username,
+			"config", configPath,
+		)
+	case cfg.Auth.Enabled:
+		logger.Info("auth enabled", "username", cfg.Auth.Username)
+	default:
+		logger.Warn("auth disabled — web UI and API are open to the network")
+	}
+}
+
 func main() {
 	configPath := flag.String("config", "./config/config.yaml", "path to config.yaml")
 	flag.Parse()
@@ -70,15 +87,8 @@ func main() {
 			slog.Error("failed to persist generated auth password", "error", err)
 			os.Exit(1)
 		}
-		slog.Warn("auth enabled with auto-generated password — change it in the web UI",
-			"username", cfg.Auth.Username,
-			"password", cfg.Auth.Password,
-		)
-	} else if cfg.Auth.Enabled {
-		slog.Info("auth enabled", "username", cfg.Auth.Username)
-	} else {
-		slog.Warn("auth disabled — web UI and API are open to the network")
 	}
+	logAuthStatus(slog.Default(), cfg, *configPath, authGenerated)
 
 	// When qBittorrent sync is on, ask the real client its version and make
 	// sure a spoofing profile exists for exactly that version — a static

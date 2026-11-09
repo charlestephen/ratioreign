@@ -4,6 +4,16 @@ All notable changes to RatioReign are documented in this file, starting
 from this entry onward. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Security
+
+- The auto-generated admin password is no longer written to the log
+  (clear-text logging of sensitive information). The startup warning now
+  names the config file; read `auth.password` from it, then change it in
+  the web UI. If you started a version that logged it, treat that password
+  as exposed and change it, and clear or rotate any logs that kept it.
+
 ## [2.2.0] - 2026-11-04
 
 ### Added

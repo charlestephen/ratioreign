@@ -91,11 +91,14 @@ curl -s -u admin:"$RATIOREIGN_PASSWORD" localhost:7070/api/torrents | jq
 
 HTTP Basic Auth is **on by default**. On first start with an empty
 `auth.password`, RatioReign generates a random password, saves it into your
-`config.yaml`, and prints it once at WARN level:
+`config.yaml`. The password is never written to the log; the WARN line
+only names the config file to read it from:
 
 ```text
-auth enabled with auto-generated password — change it in the web UI username=admin password=…
+auth enabled with an auto-generated password; read auth.password from the config file, then change it in the web UI username=admin config=./config/config.yaml
 ```
+
+Read `auth.password` from that file, sign in, and change it in the web UI.
 
 | Field | Default | Meaning |
 |---|---|---|
