@@ -115,7 +115,8 @@ func defaults() Config {
 
 // EnsureAuthCredentials fills a missing Basic Auth password when auth is
 // enabled. Returns (true, password) when a new password was generated so
-// the caller can persist the config and log the one-time secret.
+// the caller can persist the config. The password must not be logged; it is
+// stored in the config file.
 func (c *Config) EnsureAuthCredentials() (generated bool, password string, err error) {
 	if c.Auth.Username == "" {
 		c.Auth.Username = "admin"
@@ -135,7 +136,7 @@ func (c *Config) EnsureAuthCredentials() (generated bool, password string, err e
 // Load reads and validates the config file at path, filling in defaults for
 // unset fields. When auth is enabled and no password is set, a random
 // password is generated (authGenerated=true); callers should Save the
-// config and surface the password once.
+// config. The generated password is stored in it and must not be logged.
 func Load(path string) (cfg *Config, authGenerated bool, err error) {
 	c := defaults()
 	data, err := os.ReadFile(path)
