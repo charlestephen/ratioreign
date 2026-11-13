@@ -6,6 +6,12 @@ from this entry onward. Format loosely follows
 
 ## [Unreleased]
 
+### Added
+
+- Docker Hub overview (`docs/dockerhub.md`) with Docker and Docker Compose
+  instructions, synced to `docker.io/charlestephen/ratioreign` by the
+  Publish to Docker Hub workflow.
+
 ### Security
 
 - The auto-generated admin password is no longer written to the log
