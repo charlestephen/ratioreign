@@ -6,11 +6,17 @@ from this entry onward. Format loosely follows
 
 ## [Unreleased]
 
+## [2.2.1] - 2026-11-13
+
 ### Added
 
 - Docker Hub overview (`docs/dockerhub.md`) with Docker and Docker Compose
   instructions, synced to `docker.io/charlestephen/ratioreign` by the
   Publish to Docker Hub workflow.
+
+### Removed
+
+- The Slack notification workflow.
 
 ### Security
 
