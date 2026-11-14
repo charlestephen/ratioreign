@@ -4,7 +4,7 @@ name: Publish to Docker Hub
 # Hub — a registry-to-registry manifest copy, no rebuild. This replaced
 # build.yml's in-workflow Docker Hub push, whose token had insufficient
 # scopes and failed every run. Credentials are the repo secrets
-# dockerhub_username / dockerhub_password (a Docker Hub access token
+# DOCKERHUB_USERNAME / DOCKERHUB_TOKEN (a Docker Hub access token
 # with Read & Write scope also works as the password).
 
 on:
@@ -30,7 +30,7 @@ jobs:
       packages: read
     env:
       GHCR_IMAGE: ghcr.io/${{ github.repository }}
-      DOCKERHUB_IMAGE: docker.io/${{ secrets.dockerhub_username }}/ratioreign
+      DOCKERHUB_IMAGE: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/ratioreign
     steps:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
@@ -45,8 +45,8 @@ jobs:
       - name: Log in to Docker Hub
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
         with:
-          username: ${{ secrets.dockerhub_username }}
-          password: ${{ secrets.dockerhub_password }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Mirror tags
         env:
@@ -84,8 +84,8 @@ jobs:
         continue-on-error: true
         uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5.0.0
         with:
-          username: ${{ secrets.dockerhub_username }}
-          password: ${{ secrets.dockerhub_password }}
-          repository: ${{ secrets.dockerhub_username }}/ratioreign
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ secrets.DOCKERHUB_USERNAME }}/ratioreign
           short-description: Headless BitTorrent ratio-farming daemon. Announces to private trackers without transferring data.
           readme-filepath: docs/dockerhub.md

@@ -360,8 +360,8 @@ Every push/PR runs (see [`.github/workflows/`](.github/workflows/)):
 - **Container build** — multi-arch (amd64/arm64) image pushed to
   `ghcr.io/charlestephen/ratioreign` on pushes to `main`; a separate
   **Publish to Docker Hub** workflow then mirrors each tag to
-  `docker.io/charlestephen/ratioreign` (repo secrets `dockerhub_username` /
-  `dockerhub_password`).
+  `docker.io/charlestephen/ratioreign` (repo secrets `DOCKERHUB_USERNAME` /
+  `DOCKERHUB_TOKEN`).
 - **CodeQL** — security + code-quality static analysis (Go and the
   workflows themselves).
 - **golangci-lint** — a second static-analysis pass, this one Go-specific:
